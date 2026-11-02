@@ -1,0 +1,24 @@
+{
+  "movie": {
+    "id": 414906,
+    "type": "movie"
+  },
+  "favorites": [
+    {
+      "id": 157336,
+      "title": "Interstellar",
+      "type": "movie"
+    },
+    {
+      "id": 27205,
+      "title": "Inception",
+      "type": "movie"
+    },
+    {
+      "id": 155,
+      "title": "The Dark Knight",
+      "type": "movie"
+    }
+  ],
+  "answers": ["A balance of both", "Plot twists", "Dark and intense"]
+}
