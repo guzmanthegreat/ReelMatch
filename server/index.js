@@ -287,7 +287,7 @@ category, shortExplanation, detailedExplanation, potentialDrawback.
 });
 
 app.post("/api/discover", async (req, res) => {
-  const { favorites } = req.body || {};
+  const { favorites, seenIds = [] } = req.body || {};
 
   if (
     !Array.isArray(favorites) ||
@@ -304,32 +304,57 @@ app.post("/api/discover", async (req, res) => {
     });
   }
 
+  if (
+    !Array.isArray(seenIds) ||
+    seenIds.length > 500 ||
+    !seenIds.every(
+      (id) => typeof id === "string" && /^(movie|tv)-\d+$/.test(id),
+    )
+  ) {
+    return res.status(400).json({
+      error: "Invalid previously seen titles.",
+    });
+  }
+
   try {
-    const requests = favorites.map(async (favorite) => {
-      const url = new URL(
-        `https://api.themoviedb.org/3/${favorite.type}/${favorite.id}/recommendations`,
-      );
+    const seenSet = new Set(seenIds);
+    const favoriteKeys = new Set(
+      favorites.map((item) => `${item.type}-${item.id}`),
+    );
 
-      url.searchParams.set("language", "en-US");
-      url.searchParams.set("page", "1");
+    const candidates = new Map();
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
-          accept: "application/json",
-        },
-      });
+    // Retrieve up to 3 pages for each favorite.
+    // The page rotates between requests to add variety.
+    const pageOffset = Math.floor(seenIds.length / 12) % 3;
 
-      if (!response.ok) {
-        throw new Error("TMDB recommendation request failed");
-      }
+    const requests = favorites.flatMap((favorite) => {
+      const pages = [1, 2, 3];
 
-      const data = await response.json();
+      return pages.map(async (page) => {
+        const rotatedPage = ((page - 1 + pageOffset) % 3) + 1;
 
-      return data.results
-        .filter((item) => item.id && (item.title || item.name))
-        .slice(0, 8)
-        .map((item) => ({
+        const url = new URL(
+          `https://api.themoviedb.org/3/${favorite.type}/${favorite.id}/recommendations`,
+        );
+
+        url.searchParams.set("language", "en-US");
+        url.searchParams.set("page", String(rotatedPage));
+
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
+            accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("TMDB recommendation request failed");
+        }
+
+        const data = await response.json();
+
+        return data.results.map((item) => ({
           id: item.id,
           title: item.title || item.name,
           type: favorite.type,
@@ -338,28 +363,88 @@ app.post("/api/discover", async (req, res) => {
             ? `https://image.tmdb.org/t/p/w185${item.poster_path}`
             : null,
           overview: item.overview || "",
+          popularity: item.popularity || 0,
+          rating: item.vote_average || 0,
+          voteCount: item.vote_count || 0,
         }));
+      });
     });
 
-    const recommendationGroups = await Promise.all(requests);
+    const groups = await Promise.all(requests);
 
-    const combined = recommendationGroups.flat();
+    for (const movie of groups.flat()) {
+      if (!movie.id || !movie.title || !movie.poster || movie.voteCount < 20) {
+        continue;
+      }
 
-    const favoriteIds = new Set(
-      favorites.map((item) => `${item.type}-${item.id}`),
-    );
+      const key = `${movie.type}-${movie.id}`;
 
-    const unique = new Map();
-
-    for (const item of combined) {
-      const key = `${item.type}-${item.id}`;
-
-      if (!favoriteIds.has(key) && !unique.has(key)) {
-        unique.set(key, item);
+      if (!favoriteKeys.has(key) && !candidates.has(key)) {
+        candidates.set(key, movie);
       }
     }
 
-    res.json(Array.from(unique.values()).slice(0, 12));
+    const allMovies = Array.from(candidates.values());
+
+    // Prefer titles the user has not seen yet.
+    let available = allMovies.filter(
+      (movie) => !seenSet.has(`${movie.type}-${movie.id}`),
+    );
+
+    // If everything has been seen, recycle older titles.
+    if (available.length === 0) {
+      available = allMovies;
+    }
+
+    // Sort by popularity to establish relative popularity groups.
+    available.sort((a, b) => b.popularity - a.popularity);
+
+    const split = Math.ceil(available.length / 2);
+
+    const popular = available.slice(0, split);
+    const hiddenGems = available.slice(split);
+
+    // Rank each group using ratings and vote counts.
+    function rankScore(movie) {
+      return movie.rating * Math.log10(movie.voteCount + 1);
+    }
+
+    popular.sort((a, b) => rankScore(b) - rankScore(a));
+    hiddenGems.sort((a, b) => rankScore(b) - rankScore(a));
+
+    // Rotate selection order so refreshes offer more variety.
+    const rotation = Math.floor(seenIds.length / 12);
+
+    function rotate(items) {
+      if (items.length === 0) return [];
+
+      const offset = rotation % items.length;
+
+      return [...items.slice(offset), ...items.slice(0, offset)];
+    }
+
+    const recommendations = [
+      ...rotate(popular).slice(0, 9),
+      ...rotate(hiddenGems).slice(0, 3),
+    ];
+
+    // Fill remaining slots from other available candidates.
+    const selectedKeys = new Set(
+      recommendations.map((item) => `${item.type}-${item.id}`),
+    );
+
+    for (const movie of available) {
+      if (recommendations.length >= 12) break;
+
+      const key = `${movie.type}-${movie.id}`;
+
+      if (!selectedKeys.has(key)) {
+        recommendations.push(movie);
+        selectedKeys.add(key);
+      }
+    }
+
+    res.json(recommendations);
   } catch (error) {
     console.error("Discovery error:", error.message);
 
