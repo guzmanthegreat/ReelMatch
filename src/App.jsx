@@ -891,6 +891,25 @@ function App() {
           </button>
         </main>
       )}
+
+      <footer className="tmdb-credits">
+        <a
+          href="https://www.themoviedb.org/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <img
+            src="/tmdb-logo.svg"
+            alt="The Movie Database (TMDB)"
+            className="tmdb-logo"
+          />
+        </a>
+
+        <p>
+          This product uses the TMDB API but is not endorsed or certified by
+          TMDB.
+        </p>
+      </footer>
     </div>
   );
 }

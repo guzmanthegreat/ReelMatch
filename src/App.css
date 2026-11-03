@@ -572,3 +572,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+.tmdb-credits {
+  margin: 40px auto 20px;
+  padding: 20px;
+  max-width: 600px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.tmdb-logo {
+  width: 90px;
+  height: auto;
+}
+
+.tmdb-credits p {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
