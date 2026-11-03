@@ -676,7 +676,9 @@ function App() {
             >
               {discoverLoading
                 ? "Finding recommendations..."
-                : "✦ Discover For Me"}
+                : recommendations.length > 0
+                  ? "↻ Refresh Recommendations"
+                  : "✦ Discover For Me"}
             </button>
           </div>
 
