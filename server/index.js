@@ -546,29 +546,6 @@ app.listen(PORT, () => {
   console.log(`ReelMatch API running on port ${PORT}`);
 });
 
-app.get("/api/firebase-health", async (req, res) => {
-  try {
-    const { getFirestore } = require("firebase-admin/firestore");
-
-    const db = getFirestore();
-
-    // Read only the global usage counter.
-    const snapshot = await db.collection("system").doc("aiUsage").get();
-
-    res.json({
-      firebase: "connected",
-      firestore: "connected",
-      counterExists: snapshot.exists,
-    });
-  } catch (error) {
-    console.error("Firebase health check failed:", error.code || error.message);
-
-    res.status(503).json({
-      firebase: "unavailable",
-    });
-  }
-});
-
 //endpoint search
 app.get("/api/search", async (req, res) => {
   const query = req.query.query?.trim();
