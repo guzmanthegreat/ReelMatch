@@ -311,7 +311,7 @@ function App() {
     try {
       const idToken = await user.getIdToken();
 
-      const response = await fetch("${API_URL}/api/match", {
+      const response = await fetch(`${API_URL}/api/match`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -353,7 +353,7 @@ function App() {
     setDiscoverError("");
 
     try {
-      const response = await fetch("${API_URL}/api/discover", {
+      const response = await fetch(`${API_URL}/api/discover`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
