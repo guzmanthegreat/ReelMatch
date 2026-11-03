@@ -2,6 +2,10 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
+const { adminAuth } = require("./firebaseAdmin");
+
+const { reserveAIRequest } = require("./aiUsageLimit");
+
 const OpenAI = require("openai");
 
 const openai = new OpenAI({
@@ -11,13 +15,119 @@ const openai = new OpenAI({
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: allowedOrigins,
   }),
 );
 
 app.use(express.json({ limit: "20kb" }));
+
+async function requireAuth(req, res, next) {
+  const authorization = req.headers.authorization || "";
+
+  if (!authorization.startsWith("Bearer ")) {
+    return res.status(401).json({
+      error: "Authentication required.",
+    });
+  }
+
+  const token = authorization.slice(7).trim();
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Authentication required.",
+    });
+  }
+
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(token);
+
+    req.user = decodedToken;
+
+    next();
+  } catch (error) {
+    console.error("Authentication failed:", error.code);
+
+    return res.status(401).json({
+      error: "Invalid or expired authentication token.",
+    });
+  }
+}
+
+//AI Rate Limiter
+const aiUsage = new Map();
+function limitAIRequests(req, res, next) {
+  const userId = req.user.uid;
+  const now = Date.now();
+
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+
+  const usage = aiUsage.get(userId) || {
+    requests: [],
+    busy: false,
+  };
+
+  // Remove requests older than 24 hours.
+  usage.requests = usage.requests.filter((time) => now - time < day);
+
+  const hourlyCount = usage.requests.filter((time) => now - time < hour).length;
+
+  if (usage.busy) {
+    return res.status(429).json({
+      error: "An AI prediction is already running.",
+    });
+  }
+
+  if (hourlyCount >= 5 || usage.requests.length >= 15) {
+    return res.status(429).json({
+      error: "AI prediction limit reached. Please try later.",
+    });
+  }
+
+  // Reserve a request before allowing the AI call.
+  usage.requests.push(now);
+  usage.busy = true;
+  aiUsage.set(userId, usage);
+
+  // Release the user's slot when the response finishes.
+  res.once("finish", () => {
+    usage.busy = false;
+  });
+
+  res.once("close", () => {
+    usage.busy = false;
+  });
+
+  next();
+}
+
+async function enforceGlobalAILimit(req, res, next) {
+  try {
+    const result = await reserveAIRequest();
+
+    if (!result.allowed) {
+      return res.status(429).json({
+        error: "ReelMatch has reached its AI demo usage limit.",
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Global AI limit error:", error.message);
+
+    return res.status(503).json({
+      error: "AI predictions are temporarily unavailable.",
+    });
+  }
+}
 
 //endpoint search
 app.get("/api/test", async (req, res) => {
@@ -51,120 +161,97 @@ app.get("/api/test", async (req, res) => {
   }
 });
 
-app.get("/api/ai-test", async (req, res) => {
-  try {
-    const response = await openai.responses.create({
-      model: "gpt-6-luna",
-      reasoning: { effort: "none" },
-      input: "Reply with exactly: ReelMatch AI connected.",
-      max_output_tokens: 50,
-    });
+app.post(
+  "/api/match",
+  requireAuth,
+  limitAIRequests,
+  enforceGlobalAILimit,
+  async (req, res) => {
+    const { movie, favorites, answers } = req.body || {};
 
-    res.json({
-      connected: true,
-      message: response.output_text,
-    });
-  } catch (error) {
-    console.error(
-      "OpenAI test error:",
-      error.status,
-      error.code,
-      error.message,
-    );
-
-    res.status(500).json({
-      connected: false,
-      error: "OpenAI connection failed. Check the backend terminal.",
-    });
-  }
-});
-
-app.post("/api/match", async (req, res) => {
-  const { movie, favorites, answers } = req.body || {};
-
-  // Check that the required information exists.
-  if (
-    !movie ||
-    !["movie", "tv"].includes(movie.type) ||
-    !Number.isInteger(movie.id) ||
-    !Array.isArray(favorites) ||
-    favorites.length !== 3 ||
-    !favorites.every(
-      (item) =>
-        item &&
-        ["movie", "tv"].includes(item.type) &&
-        Number.isInteger(item.id),
-    ) ||
-    !Array.isArray(answers) ||
-    answers.length !== 3 ||
-    !answers.every(
-      (answer) =>
-        typeof answer === "string" &&
-        answer.trim().length > 0 &&
-        answer.length <= 100,
-    )
-  ) {
-    return res.status(400).json({
-      error: "A movie and complete taste profile are required.",
-    });
-  }
-
-  try {
-    // Retrieve the selected title from TMDB.
-    const tmdbResponse = await fetch(
-      `https://api.themoviedb.org/3/${movie.type}/${movie.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
-          accept: "application/json",
-        },
-      },
-    );
-
-    if (!tmdbResponse.ok) {
-      return res.status(502).json({
-        error: "Could not retrieve movie information.",
+    // Check that the required information exists.
+    if (
+      !movie ||
+      !["movie", "tv"].includes(movie.type) ||
+      !Number.isInteger(movie.id) ||
+      !Array.isArray(favorites) ||
+      favorites.length !== 3 ||
+      !favorites.every(
+        (item) =>
+          item &&
+          ["movie", "tv"].includes(item.type) &&
+          Number.isInteger(item.id),
+      ) ||
+      !Array.isArray(answers) ||
+      answers.length !== 3 ||
+      !answers.every(
+        (answer) =>
+          typeof answer === "string" &&
+          answer.trim().length > 0 &&
+          answer.length <= 100,
+      )
+    ) {
+      return res.status(400).json({
+        error: "A movie and complete taste profile are required.",
       });
     }
 
-    const movieData = await tmdbResponse.json();
-
-    const selectedMovie = {
-      title: movieData.title || movieData.name,
-      overview: movieData.overview,
-      genres: movieData.genres?.map((genre) => genre.name) || [],
-      releaseDate: movieData.release_date || movieData.first_air_date,
-    };
-
-    const favoriteDetails = await Promise.all(
-      favorites.map(async (item) => {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/${item.type}/${item.id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
-              accept: "application/json",
-            },
+    try {
+      // Retrieve the selected title from TMDB.
+      const tmdbResponse = await fetch(
+        `https://api.themoviedb.org/3/${movie.type}/${movie.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
+            accept: "application/json",
           },
-        );
+        },
+      );
 
-        if (!response.ok) {
-          throw new Error(`Could not retrieve favorite title ${item.id}`);
-        }
+      if (!tmdbResponse.ok) {
+        return res.status(502).json({
+          error: "Could not retrieve movie information.",
+        });
+      }
 
-        const data = await response.json();
+      const movieData = await tmdbResponse.json();
 
-        return {
-          title: data.title || data.name,
-          type: item.type,
-          genres: data.genres?.map((genre) => genre.name) || [],
-          overview: data.overview || "",
-          releaseDate: data.release_date || data.first_air_date || "",
-        };
-      }),
-    );
+      const selectedMovie = {
+        title: movieData.title || movieData.name,
+        overview: movieData.overview,
+        genres: movieData.genres?.map((genre) => genre.name) || [],
+        releaseDate: movieData.release_date || movieData.first_air_date,
+      };
 
-    const prompt = `
+      const favoriteDetails = await Promise.all(
+        favorites.map(async (item) => {
+          const response = await fetch(
+            `https://api.themoviedb.org/3/${item.type}/${item.id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
+                accept: "application/json",
+              },
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`Could not retrieve favorite title ${item.id}`);
+          }
+
+          const data = await response.json();
+
+          return {
+            title: data.title || data.name,
+            type: item.type,
+            genres: data.genres?.map((genre) => genre.name) || [],
+            overview: data.overview || "",
+            releaseDate: data.release_date || data.first_air_date || "",
+          };
+        }),
+      );
+
+      const prompt = `
 You are ReelMatch, a thoughtful movie and TV recommendation advisor.
 
 Your job is to compare a user's viewing preferences with a
@@ -223,68 +310,69 @@ Return only valid JSON with these exact fields:
 category, shortExplanation, detailedExplanation, potentialDrawback.
 `;
 
-    const response = await openai.responses.create({
-      model: "gpt-6-luna",
-      reasoning: { effort: "none" },
-      input: prompt,
-      max_output_tokens: 500,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "movie_match",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              category: {
-                type: "string",
-                enum: [
-                  "Perfect Match",
-                  "Highly Likely",
-                  "Worth a Watch",
-                  "Unlikely Match",
-                  "Not for You",
-                ],
+      const response = await openai.responses.create({
+        model: "gpt-6-luna",
+        reasoning: { effort: "none" },
+        input: prompt,
+        max_output_tokens: 500,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "movie_match",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                category: {
+                  type: "string",
+                  enum: [
+                    "Perfect Match",
+                    "Highly Likely",
+                    "Worth a Watch",
+                    "Unlikely Match",
+                    "Not for You",
+                  ],
+                },
+                shortExplanation: { type: "string" },
+                detailedExplanation: { type: "string" },
+                potentialDrawback: { type: "string" },
               },
-              shortExplanation: { type: "string" },
-              detailedExplanation: { type: "string" },
-              potentialDrawback: { type: "string" },
+              required: [
+                "category",
+                "shortExplanation",
+                "detailedExplanation",
+                "potentialDrawback",
+              ],
+              additionalProperties: false,
             },
-            required: [
-              "category",
-              "shortExplanation",
-              "detailedExplanation",
-              "potentialDrawback",
-            ],
-            additionalProperties: false,
           },
         },
-      },
-    });
+      });
 
-    if (!response.output_text) {
-      throw new Error("AI returned no usable output");
+      if (!response.output_text) {
+        throw new Error("AI returned no usable output");
+      }
+
+      const result = JSON.parse(response.output_text);
+
+      res.json({
+        movie: selectedMovie,
+        ...result,
+      });
+    } catch (error) {
+      console.error(
+        "AI matching error:",
+        error.status,
+        error.code,
+        error.message,
+      );
+
+      res.status(500).json({
+        error: "Unable to generate a match right now.",
+      });
     }
-
-    const result = JSON.parse(response.output_text);
-
-    res.json({
-      movie: selectedMovie,
-      ...result,
-    });
-  } catch (error) {
-    console.error(
-      "AI matching error:",
-      error.status,
-      error.code,
-      error.message,
-    );
-
-    res.status(500).json({
-      error: "Unable to generate a match right now.",
-    });
-  }
-});
+  },
+);
 
 app.post("/api/discover", async (req, res) => {
   const { favorites, seenIds = [] } = req.body || {};

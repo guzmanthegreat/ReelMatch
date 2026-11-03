@@ -35,6 +35,8 @@ const questions = [
   },
 ];
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 function App() {
   const [page, setPage] = useState("home");
   const [favorites, setFavorites] = useState([]);
@@ -223,7 +225,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:3001/api/search?query=${encodeURIComponent(query)}`,
+        `${API_URL}/api/search?query=${encodeURIComponent(query)}`,
       );
 
       if (!response.ok) {
@@ -255,7 +257,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:3001/api/search?query=${encodeURIComponent(query)}`,
+        `${API_URL}/api/search?query=${encodeURIComponent(query)}`,
       );
 
       if (!response.ok) {
@@ -307,10 +309,13 @@ function App() {
     setShowDetails(false);
 
     try {
-      const response = await fetch("http://localhost:3001/api/match", {
+      const idToken = await user.getIdToken();
+
+      const response = await fetch("${API_URL}/api/match", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           movie: {
@@ -348,7 +353,7 @@ function App() {
     setDiscoverError("");
 
     try {
-      const response = await fetch("http://localhost:3001/api/discover", {
+      const response = await fetch("${API_URL}/api/discover", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
