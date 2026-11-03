@@ -65,6 +65,8 @@ function App() {
   const [showDetails, setShowDetails] = useState(false);
 
   const [recommendations, setRecommendations] = useState([]);
+  const recommendationHistory = useRef([]);
+
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState("");
 
@@ -353,12 +355,18 @@ function App() {
     setDiscoverError("");
 
     try {
+      // Remember the last 36 displayed titles.
+      const recentIds = recommendationHistory.current.slice(-36);
+
       const response = await fetch(`${API_URL}/api/discover`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ favorites }),
+        body: JSON.stringify({
+          favorites,
+          seenIds: recentIds,
+        }),
       });
 
       const data = await response.json();
@@ -366,6 +374,29 @@ function App() {
       if (!response.ok) {
         throw new Error(data.error || "Could not load recommendations.");
       }
+
+      if (!Array.isArray(data) || data.length === 0) {
+        setDiscoverError("No recommendations are available right now.");
+        return;
+      }
+
+      // Update the order of previously displayed titles.
+      const history = recommendationHistory.current;
+
+      for (const movie of data) {
+        const key = `${movie.type}-${movie.id}`;
+
+        const previousIndex = history.indexOf(key);
+
+        if (previousIndex !== -1) {
+          history.splice(previousIndex, 1);
+        }
+
+        history.push(key);
+      }
+
+      // Keep the last 120 unique titles.
+      recommendationHistory.current = history.slice(-120);
 
       setRecommendations(data);
     } catch (error) {
