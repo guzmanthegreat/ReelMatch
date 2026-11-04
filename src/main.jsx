@@ -70,6 +70,7 @@ function App() {
     [match, M] = useState(null),
     [busy, B] = useState(false),
     [searchBusy, SB] = useState(false),
+    [trendingBusy, TB] = useState(true),
     [error, E] = useState(""),
     [health, H] = useState(null),
     [pageNum, N] = useState(1),
@@ -92,7 +93,8 @@ function App() {
       .catch(() => {});
     api("/api/trending")
       .then((d) => G(d.results || []))
-      .catch((e) => E(e.message));
+      .catch((e) => E(e.message))
+      .finally(() => TB(false));
   }, []);
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -231,12 +233,20 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <button className="brand" onClick={() => P(taste.favorites.length ? "discover" : "welcome")}>reel<span>match.</span></button>
+        <button className="brand" onClick={() => { P("welcome"); Q(""); E(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>reel<span>match.</span></button>
         <nav aria-label="Main navigation">
           <button className={page === "discover" ? "current" : ""} onClick={() => {P(taste.favorites.length ? "discover" : "onboard"); E("");}}>Discover</button>
           <button className={page === "taste" ? "current" : ""} onClick={() => {P("taste"); E("");}}>My Taste</button>
         </nav>
       </header>
+      {(busy || searchBusy || trendingBusy) && (
+        <div className="screen-loading" role="status" aria-live="polite" aria-label="Loading">
+          <div className="screen-loading-content">
+            <div className="screen-loading-spinner" aria-hidden="true" />
+            <span>{busy ? (page === "check" ? "Checking your match…" : "Finding your movies…") : searchBusy ? "Searching movies…" : "Loading movies…"}</span>
+          </div>
+        </div>
+      )}
       <main>
         {page === "welcome" && (
           <section className="hero">

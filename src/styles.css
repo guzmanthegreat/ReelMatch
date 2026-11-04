@@ -8,3 +8,82 @@
 .reaction-options{position:absolute;right:0;top:calc(100% + 6px);z-index:12;min-width:145px;padding:7px;display:grid;gap:5px;background:#211929;border:1px solid #60456e;border-radius:10px;box-shadow:0 15px 32px #0009}
 .reaction-options button{width:100%;text-align:left;white-space:nowrap}
 .quick-actions{flex-wrap:wrap}
+
+/* Centered loading overlay for trending, search, recommendations, and match checks. */
+.screen-loading{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:rgba(8,7,12,.78);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+.screen-loading-content{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px;text-align:center;color:#f5eafa;font-weight:700;font-size:16px}
+.screen-loading-spinner{width:54px;height:54px;border:4px solid #654378;border-top-color:#d19aff;border-radius:50%;animation:reelmatch-spin .85s linear infinite}
+@keyframes reelmatch-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.screen-loading-spinner{animation:none;border-top-color:#d19aff;border-right-color:#d19aff}}
+
+/* Consistent centered actions beneath every recommendation poster. */
+.poster-card .card-details { text-align: center; align-items: stretch; }
+.poster-card .quick-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  grid-template-areas: "watch heart" "details reactions";
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 12px auto 0;
+}
+.poster-card .quick-actions > button,
+.poster-card .quick-actions .reaction-menu > summary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  margin: 0;
+  padding: 7px 6px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.poster-card .quick-actions > button:nth-child(1) { grid-area: watch; }
+.poster-card .quick-actions > button:nth-child(2) { grid-area: heart; font-size: 17px; }
+.poster-card .quick-actions > button.more-action { grid-area: details; margin-left: 0; }
+.poster-card .quick-actions > .reaction-menu { grid-area: reactions; width: 100%; }
+.poster-card .quick-actions button span { display: inline; }
+.poster-card .reaction-options { right: 0; }
+@media (max-width: 700px) {
+  .poster-card .quick-actions { grid-template-columns: minmax(0, 1fr) 34px; gap: 6px; }
+  .poster-card .quick-actions > button,
+  .poster-card .quick-actions .reaction-menu > summary { min-height: 36px; font-size: 11px; }
+}
+
+/* One centered, non-wrapping action row. The overflow menu preserves other reactions. */
+.poster-card .quick-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 34px minmax(0, 1fr) 30px;
+  grid-template-areas: "watch heart details reactions";
+  gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  margin: 10px auto 0;
+}
+.poster-card .quick-actions > button,
+.poster-card .quick-actions .reaction-menu > summary {
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 3px;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.poster-card .quick-actions > button:nth-child(1) { grid-area: watch; }
+.poster-card .quick-actions > button:nth-child(2) { grid-area: heart; font-size: 17px; }
+.poster-card .quick-actions > button.more-action { grid-area: details; margin: 0; }
+.poster-card .quick-actions > .reaction-menu { grid-area: reactions; min-width: 0; }
+.poster-card .quick-actions .reaction-menu > summary { letter-spacing: 0; }
+.poster-card .quick-actions button span { display: inline; }
+@media (max-width: 700px) {
+  .poster-card .quick-actions { grid-template-columns: minmax(0, 1.5fr) 30px minmax(0, 1fr) 28px; gap: 3px; }
+  .poster-card .quick-actions > button,
+  .poster-card .quick-actions .reaction-menu > summary { min-height: 32px; padding: 4px 2px; font-size: 9px; }
+  .poster-card .quick-actions > button:nth-child(2) { font-size: 16px; }
+}
