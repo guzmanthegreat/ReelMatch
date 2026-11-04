@@ -115,6 +115,7 @@ function App() {
   const [error, E] = useState("");
   const [pageNum, N] = useState(1);
   const [showHistory, SH] = useState(false);
+  const [returnPage, setReturnPage] = useState("discover");
   const initialFavorites = useRef(read().favorites.length > 0);
   const autoRequested = useRef(false);
 
@@ -127,6 +128,22 @@ function App() {
   useEffect(() => {
     if (page === "discover" && taste.favorites.length && !recommendationRows.length && !autoRequested.current) { autoRequested.current = true; recommend(); }
   }, [page, taste.favorites.length]);
+  useEffect(() => {
+    if (["welcome", "discover"].includes(page)) return undefined;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "page-back";
+    button.textContent = "← Back";
+    const goBack = () => {
+      if (page === "onboard") P("welcome");
+      else if (page === "check") P(returnPage);
+      else if (page === "taste") P(taste.favorites.length ? "discover" : "welcome");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    button.addEventListener("click", goBack);
+    document.body.appendChild(button);
+    return () => { button.removeEventListener("click", goBack); button.remove(); };
+  }, [page, returnPage, taste.favorites.length]);
   useEffect(() => {
     if (q.trim().length < 2) { R([]); return; }
     const ctrl = new AbortController();
@@ -167,6 +184,7 @@ function App() {
   }
 
   async function check(x) {
+    setReturnPage(page === "check" ? "discover" : page);
     S(x); M({ category: null, reason: "" }); P("check"); Q(""); E(""); B(true);
     try {
       const response = await fetch("/api/match/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload(), title: x }) });
