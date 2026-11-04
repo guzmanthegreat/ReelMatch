@@ -1,19 +1,673 @@
-import React,{useEffect,useState} from 'react';import{createRoot}from'react-dom/client';import './styles.css';
-const STORE='reelmatch-ready-taste';const read=()=>{try{return JSON.parse(localStorage.getItem(STORE))||{favorites:[],feedback:{},history:[],preferences:{}}}catch{return{favorites:[],feedback:{},history:[],preferences:{}}}};const key=x=>x.type+':'+x.id;const QUESTIONS=[{id:'mood',title:'What are you in the mood for?',options:['Surprise me','Something intense','Feel-good','Mind-bending','Easy watching']},{id:'pace',title:'Your ideal pacing?',options:['No preference','Fast-paced','Slow burn','A bit of both']},{id:'format',title:'What should we prioritize?',options:['Movies and TV','Movies','TV shows']}];
-async function api(url,options){const r=await fetch(url,options);let d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d}const post=(url,data)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-function Poster({x}){return x.poster?<img src={x.poster} alt={x.title+' poster'} loading="lazy"/>:<div className="missing">No poster</div>}
-function App(){const[page,P]=useState('welcome'),[taste,T]=useState(read),[q,Q]=useState(''),[results,R]=useState([]),[trending,G]=useState([]),[picks,K]=useState([]),[selected,S]=useState(null),[match,M]=useState(null),[busy,B]=useState(false),[searchBusy,SB]=useState(false),[error,E]=useState(''),[health,H]=useState(null),[pageNum,N]=useState(1),[tasteStep,TS]=useState(0),[showHistory,SH]=useState(false);
-useEffect(()=>localStorage.setItem(STORE,JSON.stringify(taste)),[taste]);useEffect(()=>{api('/api/health').then(H).catch(()=>{});api('/api/trending').then(d=>G(d.results||[])).catch(e=>E(e.message))},[]);
-useEffect(()=>{if(q.trim().length<2){R([]);return}const ctrl=new AbortController();const timer=setTimeout(()=>{SB(true);api('/api/search?q='+encodeURIComponent(q),{signal:ctrl.signal}).then(d=>{R(d.results||[]);E('')}).catch(e=>{if(e.name!=='AbortError')E(e.message)}).finally(()=>{if(!ctrl.signal.aborted)SB(false)})},300);return()=>{clearTimeout(timer);ctrl.abort()}},[q]);
-const favorite=x=>T(t=>({...t,favorites:t.favorites.some(f=>key(f)===key(x))?t.favorites.filter(f=>key(f)!==key(x)):[...t.favorites,x]}));const liked=x=>taste.favorites.some(f=>key(f)===key(x));const feedback=(x,value)=>T(t=>{const updated={...t.feedback};if(updated[key(x)]?.value===value)delete updated[key(x)];else updated[key(x)]={...x,value};return {...t,feedback:updated}});const payload=()=>({favorites:taste.favorites,feedback:Object.values(taste.feedback),preferences:taste.preferences||{}});const setPreference=(id,value)=>T(t=>({...t,preferences:{...(t.preferences||{}),[id]:value}}));
-async function recommend(){if(!taste.favorites.length){P('onboard');E('Choose at least one favorite to personalize your recommendations.');return}B(true);E('');try{const d=await post('/api/recommend',{...payload(),exclude:taste.history,page:pageNum});K(d.results||[]);T(t=>({...t,history:[...t.history.filter(k=>!(d.results||[]).some(x=>key(x)===k)),...(d.results||[]).map(key)].slice(-250)}));N(n=>n>=29?1:n+2)}catch(e){E(e.message)}finally{B(false)}}
-async function check(x){S(x);M(null);P('check');Q('');R([]);B(true);E('');try{M(await post('/api/match',{...payload(),title:x}))}catch(e){E(e.message)}finally{B(false)}}
-const cards=(items,mode='favorite')=><div className={'poster-grid '+(mode==='favorite'?'poster-carousel':'') }>{items.map(x=><article className="poster-card" key={key(x)}><button className="poster-open" onClick={()=>check(x)} aria-label={'Check '+x.title}><Poster x={x}/></button><div className="card-details"><strong title={x.title}>{x.title}</strong><span>{x.year||'Unknown year'} · {x.type==='tv'?'TV':'Movie'}</span>{x.category&&<span className="category">✦ {x.category}</span>}{x.reason&&<details className="reason"><summary>Why this pick?</summary><p>{x.reason}</p></details>}{mode==='favorite'?<button className={liked(x)?'small-button selected':'small-button'} onClick={()=>favorite(x)}>{liked(x)?'✓ Favorite':'+ Add favorite'}</button>:<div className="feedback" aria-label={'Feedback for '+x.title}>{[['love','♥ Loved It'],['watch','＋ Want to Watch'],['seen','✓ Already Seen'],['no','✕ Not for Me']].map(([v,label])=><button className={taste.feedback[key(x)]?.value===v?'active':''} key={v} onClick={()=>feedback(x,v)} aria-pressed={taste.feedback[key(x)]?.value===v}>{label}</button>)}</div>}</div></article>)}</div>;
-const search=<label className="search"><span aria-hidden="true">⌕</span><input value={q} onChange={e=>Q(e.target.value)} placeholder="Search real movies & TV shows…" aria-label="Search movies and TV shows"/>{searchBusy&&<span className="muted">Searching…</span>}</label>;
-return <div className="app"><header className="header"><button className="brand" onClick={()=>P('welcome')}>reel<span>match.</span></button><nav aria-label="Main navigation">{[['discover','Discover'],['check','Check a Match'],['taste','My Taste']].map(([id,label])=><button key={id} className={page===id?'current':''} onClick={()=>{P(id);Q('');E('')}}>{label}</button>)}</nav></header><main>{page==='welcome'&&<section className="hero"><div className="eyebrow">MOVIE NIGHT, SORTED.</div><h1>Less scrolling.<br/><em>More watching.</em></h1><p>Real titles. Your taste. AI picks with a personality.</p><button className="primary" onClick={()=>{P('onboard');E('')}}>Find My Next Watch ↗</button><div className="hero-caption">✦ No signup &nbsp; ✦ Your taste, your rules &nbsp; ✦ Movies + TV</div><div className="hero-orb" aria-hidden="true"><span>THE<br/>NEXT<br/>BIG<br/>THING.</span></div></section>}
-{page==='onboard'&&<section className="section"><div className="eyebrow">STEP 01 OF 02 — BUILD YOUR TASTE</div><h1>What's your <em>obsession?</em></h1><p>Pick your favorites. Search by name or browse trending titles. Add as many as you like.</p>{search}{error&&<p className="error" role="alert">{error}</p>}<div className="collection-heading"><h2>{q.trim().length>=2?'Search results':'Trending right now'}</h2><span>Swipe to explore →</span></div>{cards(q.trim().length>=2?results:trending)}<div className="sticky-next"><span>{taste.favorites.length} favorites selected</span><button className="primary" disabled={!taste.favorites.length} onClick={()=>{P('preferences');Q('');E('')}}>Continue →</button></div></section>}
-{page==='preferences'&&<section className="section preferences-section"><div className="eyebrow">STEP 02 OF 02 — OPTIONAL</div><h1>Fine-tune your <em>vibe.</em></h1><p>Answer anything you like, or skip straight to your recommendations. You can change these later.</p><div className="progress-dots" aria-label={'Question '+(tasteStep+1)+' of '+QUESTIONS.length}>{QUESTIONS.map((item,i)=><span key={item.id} className={i===tasteStep?'active':''}/>)}</div><div className="preference-panel"><h2>{QUESTIONS[tasteStep].title}</h2><div className="preference-options">{QUESTIONS[tasteStep].options.map(option=><button key={option} className={(taste.preferences||{})[QUESTIONS[tasteStep].id]===option?'preference-choice chosen':'preference-choice'} aria-pressed={(taste.preferences||{})[QUESTIONS[tasteStep].id]===option} onClick={()=>setPreference(QUESTIONS[tasteStep].id,option)}>{option}</button>)}</div></div><div className="preference-actions"><button className="secondary" onClick={()=>TS(n=>Math.max(0,n-1))} disabled={tasteStep===0}>← Back</button><button className="secondary" onClick={()=>{P('discover');TS(0)}}>Skip questions</button><button className="primary" onClick={()=>tasteStep===QUESTIONS.length-1?(P('discover'),TS(0)):TS(n=>n+1)}>{tasteStep===QUESTIONS.length-1?'Start discovering →':'Next →'}</button></div></section>}
-{page==='discover'&&<section className="section"><div className="eyebrow">CURATED FOR YOUR VIBE</div><h1>Your next <em>obsession.</em></h1><p>AI ranks real TMDB titles based on what you love. React to picks to shape your taste.</p>{search}<div className="toolbar"><div><span className="eyebrow">{q.trim().length>=2?'SEARCH RESULTS':picks.length?'PERSONALIZED FOR YOU':'YOUR NEXT WATCH'}</span><h2>{q.trim().length>=2?'Explore titles':picks.length?'The lineup':'Ready when you are'}</h2></div><button className="secondary" disabled={busy} onClick={recommend}>{busy?'Finding your picks…':picks.length?'↻ Refresh AI picks':'✦ Get AI recommendations'}</button></div>{error&&<p className="error" role="alert">{error}</p>}{busy&&<p className="loading-note" role="status">Finding verified titles and ranking them for you…</p>}{q.trim().length>=2?cards(results,'check'):picks.length?cards(picks,'feedback'):<div className="empty">{taste.favorites.length?'Press “Get AI recommendations” to find your next watch.':'Add some favorites first so AI can learn your taste.'}<div><button className="secondary" onClick={()=>P('onboard')}>+ Choose favorites</button></div></div>}</section>}
-{page==='check'&&<section className="section"><div className="eyebrow">CHECK A MATCH</div><h1>Is it <em>your vibe?</em></h1><p>Search any title. ReelMatch will predict how well it fits your taste.</p>{search}{error&&<p className="error" role="alert">{error}</p>}{selected&&<div className="selected-title"><Poster x={selected}/><div><div className="eyebrow">MATCH ANALYSIS</div><h2>{selected.title} <span className="muted">{selected.year}</span></h2>{busy?<p>Analyzing your taste…</p>:match?<><h3 className="category">{match.category}</h3><p>{match.reason}</p></>:<p>Select a title to check your match.</p>}<button className="secondary" onClick={()=>favorite(selected)}>{liked(selected)?'Remove favorite':'+ Add favorite'}</button></div></div>}{q.trim().length>=2&&cards(results,'check')}</section>}
-{page==='taste'&&<section className="section"><div className="eyebrow">YOUR COLLECTION</div><h1>My <em>Taste.</em></h1><p>{taste.favorites.length} favorites · {Object.keys(taste.feedback).length} reactions. Saved in this browser.</p><div className="taste-actions"><button className="secondary" onClick={()=>P('onboard')}>+ Add favorites</button><button className="secondary" onClick={()=>{TS(0);P('preferences')}}>Edit preferences</button><button className="secondary" onClick={()=>SH(v=>!v)}>{showHistory?'Hide':'Show'} discovery history ({taste.history.length})</button></div>{showHistory&&<div className="history-note">ReelMatch remembers {taste.history.length} recently recommended titles in this browser to reduce repeats. This history is used for ranking, not as a watched list. <button className="small-button" onClick={()=>{if(window.confirm('Clear recommendation history? Your favorites and reactions will stay saved.'))T(t=>({...t,history:[]}))}}>Clear history</button></div>}<h2 className="collection-title">Favorites</h2>{taste.favorites.length?cards(taste.favorites):<div className="empty">No favorites yet. Add a few titles to start shaping your taste.</div>}{[['love','Loved It'],['watch','Want to Watch'],['seen','Already Seen'],['no','Not for Me']].map(([v,label])=>{const items=Object.values(taste.feedback).filter(x=>x.value===v);return <section key={v} className="taste-group"><h2 className="collection-title">{label} <span className="muted">({items.length})</span></h2>{items.length?<div className="taste-list">{items.map(x=><div className="taste-row" key={key(x)}><button className="taste-poster" onClick={()=>check(x)} aria-label={'Check '+x.title}><Poster x={x}/></button><div className="taste-row-info"><strong>{x.title}</strong><span className="muted">{x.year||'Unknown year'} · {x.type==='tv'?'TV':'Movie'}</span></div><button className="small-button" onClick={()=>feedback(x,v)} aria-label={'Remove '+label+' from '+x.title}>Remove</button></div>)}</div>:<p className="muted">No titles here yet.</p>}</section>})}</section>}</main><footer><div><strong>reel<span>match.</span></strong><p>Made for the indecisive movie lover.</p></div><div className="attribution"><img src="/tmdb-logo.svg" alt="TMDB logo"/><p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div></footer></div>}
-createRoot(document.getElementById('root')).render(<App/>);
+import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
+const STORE = "reelmatch-ready-taste";
+const read = () => {
+  try {
+    return (
+      JSON.parse(localStorage.getItem(STORE)) || {
+        favorites: [],
+        feedback: {},
+        history: [],
+        preferences: {},
+      }
+    );
+  } catch {
+    return { favorites: [], feedback: {}, history: [], preferences: {} };
+  }
+};
+const key = (x) => x.type + ":" + x.id;
+const QUESTIONS = [
+  {
+    id: "mood",
+    title: "What are you in the mood for?",
+    options: [
+      "Surprise me",
+      "Something intense",
+      "Feel-good",
+      "Mind-bending",
+      "Easy watching",
+    ],
+  },
+  {
+    id: "pace",
+    title: "Your ideal pacing?",
+    options: ["No preference", "Fast-paced", "Slow burn", "A bit of both"],
+  },
+  {
+    id: "format",
+    title: "What should we prioritize?",
+    options: ["Movies and TV", "Movies", "TV shows"],
+  },
+];
+async function api(url, options) {
+  const r = await fetch(url, options);
+  let d = await r.json();
+  if (!r.ok) throw Error(d.error || "Request failed");
+  return d;
+}
+const post = (url, data) =>
+  api(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+function Poster({ x }) {
+  return x.poster ? (
+    <img src={x.poster} alt={x.title + " poster"} loading="lazy" />
+  ) : (
+    <div className="missing">No poster</div>
+  );
+}
+function App() {
+  const [page, P] = useState("welcome"),
+    [taste, T] = useState(read),
+    [q, Q] = useState(""),
+    [results, R] = useState([]),
+    [trending, G] = useState([]),
+    [picks, K] = useState([]),
+    [selected, S] = useState(null),
+    [match, M] = useState(null),
+    [busy, B] = useState(false),
+    [searchBusy, SB] = useState(false),
+    [error, E] = useState(""),
+    [health, H] = useState(null),
+    [pageNum, N] = useState(1),
+    [tasteStep, TS] = useState(0),
+    [showHistory, SH] = useState(false);
+  useEffect(() => localStorage.setItem(STORE, JSON.stringify(taste)), [taste]);
+  useEffect(() => {
+    api("/api/health")
+      .then(H)
+      .catch(() => {});
+    api("/api/trending")
+      .then((d) => G(d.results || []))
+      .catch((e) => E(e.message));
+  }, []);
+  useEffect(() => {
+    if (q.trim().length < 2) {
+      R([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => {
+      SB(true);
+      api("/api/search?query=" + encodeURIComponent(q), { signal: ctrl.signal })
+        .then((d) => {
+          R(Array.isArray(d) ? d : []);
+          E("");
+        })
+        .catch((e) => {
+          if (e.name !== "AbortError") E(e.message);
+        })
+        .finally(() => {
+          if (!ctrl.signal.aborted) SB(false);
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [q]);
+  const favorite = (x) =>
+    T((t) => ({
+      ...t,
+      favorites: t.favorites.some((f) => key(f) === key(x))
+        ? t.favorites.filter((f) => key(f) !== key(x))
+        : [...t.favorites, x],
+    }));
+  const liked = (x) => taste.favorites.some((f) => key(f) === key(x));
+  const feedback = (x, value) =>
+    T((t) => {
+      const updated = { ...t.feedback };
+      if (updated[key(x)]?.value === value) delete updated[key(x)];
+      else updated[key(x)] = { ...x, value };
+      return { ...t, feedback: updated };
+    });
+  const payload = () => ({
+    favorites: taste.favorites,
+    feedback: Object.values(taste.feedback),
+    preferences: taste.preferences || {},
+  });
+  const setPreference = (id, value) =>
+    T((t) => ({
+      ...t,
+      preferences: { ...(t.preferences || {}), [id]: value },
+    }));
+  async function recommend() {
+    if (!taste.favorites.length) {
+      P("onboard");
+      E("Choose at least one favorite to personalize your recommendations.");
+      return;
+    }
+    B(true);
+    E("");
+    try {
+      const d = await post("/api/recommend", {
+        ...payload(),
+        exclude: taste.history,
+        page: pageNum,
+      });
+      K(d.results || []);
+      T((t) => ({
+        ...t,
+        history: [
+          ...t.history.filter(
+            (k) => !(d.results || []).some((x) => key(x) === k),
+          ),
+          ...(d.results || []).map(key),
+        ].slice(-250),
+      }));
+      N((n) => (n >= 29 ? 1 : n + 2));
+    } catch (e) {
+      E(e.message);
+    } finally {
+      B(false);
+    }
+  }
+  async function check(x) {
+    S(x);
+    M(null);
+    P("check");
+    Q("");
+    R([]);
+    B(true);
+    E("");
+    try {
+      M(await post("/api/match", { ...payload(), title: x }));
+    } catch (e) {
+      E(e.message);
+    } finally {
+      B(false);
+    }
+  }
+  const cards = (items, mode = "favorite") => (
+    <div
+      className={
+        "poster-grid " + (mode === "favorite" ? "poster-carousel" : "")
+      }
+    >
+      {items.map((x) => (
+        <article className="poster-card" key={key(x)}>
+          <button
+            className="poster-open"
+            onClick={() => check(x)}
+            aria-label={"Check " + x.title}
+          >
+            <Poster x={x} />
+          </button>
+          <div className="card-details">
+            <strong title={x.title}>{x.title}</strong>
+            <span>
+              {x.year || "Unknown year"} · {x.type === "tv" ? "TV" : "Movie"}
+            </span>
+            {x.category && <span className="category">✦ {x.category}</span>}
+            {x.reason && (
+              <details className="reason">
+                <summary>Why this pick?</summary>
+                <p>{x.reason}</p>
+              </details>
+            )}
+            {mode === "favorite" ? (
+              <button
+                className={liked(x) ? "small-button selected" : "small-button"}
+                onClick={() => favorite(x)}
+              >
+                {liked(x) ? "✓ Favorite" : "+ Add favorite"}
+              </button>
+            ) : (
+              <div className="feedback" aria-label={"Feedback for " + x.title}>
+                {[
+                  ["love", "♥ Loved It"],
+                  ["watch", "＋ Want to Watch"],
+                  ["seen", "✓ Already Seen"],
+                  ["no", "✕ Not for Me"],
+                ].map(([v, label]) => (
+                  <button
+                    className={
+                      taste.feedback[key(x)]?.value === v ? "active" : ""
+                    }
+                    key={v}
+                    onClick={() => feedback(x, v)}
+                    aria-pressed={taste.feedback[key(x)]?.value === v}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+  const search = (
+    <label className="search">
+      <span aria-hidden="true">⌕</span>
+      <input
+        value={q}
+        onChange={(e) => Q(e.target.value)}
+        placeholder="Search real movies & TV shows…"
+        aria-label="Search movies and TV shows"
+      />
+      {searchBusy && <span className="muted">Searching…</span>}
+    </label>
+  );
+  return (
+    <div className="app">
+      <header className="header">
+        <button className="brand" onClick={() => P("welcome")}>
+          reel<span>match.</span>
+        </button>
+        <nav aria-label="Main navigation">
+          {[
+            ["discover", "Discover"],
+            ["check", "Check a Match"],
+            ["taste", "My Taste"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              className={page === id ? "current" : ""}
+              onClick={() => {
+                P(id);
+                Q("");
+                E("");
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </header>
+      <main>
+        {page === "welcome" && (
+          <section className="hero">
+            <div className="eyebrow">MOVIE NIGHT, SORTED.</div>
+            <h1>
+              Less scrolling.
+              <br />
+              <em>More watching.</em>
+            </h1>
+            <p>Real titles. Your taste. AI picks with a personality.</p>
+            <button
+              className="primary"
+              onClick={() => {
+                P("onboard");
+                E("");
+              }}
+            >
+              Find My Next Watch ↗
+            </button>
+            <div className="hero-caption">
+              ✦ No signup &nbsp; ✦ Your taste, your rules &nbsp; ✦ Movies + TV
+            </div>
+            <div className="hero-orb" aria-hidden="true">
+              <span>
+                THE
+                <br />
+                NEXT
+                <br />
+                BIG
+                <br />
+                THING.
+              </span>
+            </div>
+          </section>
+        )}
+        {page === "onboard" && (
+          <section className="section">
+            <div className="eyebrow">STEP 01 OF 02 — BUILD YOUR TASTE</div>
+            <h1>
+              What's your <em>obsession?</em>
+            </h1>
+            <p>
+              Pick your favorites. Search by name or browse trending titles. Add
+              as many as you like.
+            </p>
+            {search}
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="collection-heading">
+              <h2>
+                {q.trim().length >= 2 ? "Search results" : "Trending right now"}
+              </h2>
+              <span>Swipe to explore →</span>
+            </div>
+            {cards(q.trim().length >= 2 ? results : trending)}
+            <div className="sticky-next">
+              <span>{taste.favorites.length} favorites selected</span>
+              <button
+                className="primary"
+                disabled={!taste.favorites.length}
+                onClick={() => {
+                  P("preferences");
+                  Q("");
+                  E("");
+                }}
+              >
+                Continue →
+              </button>
+            </div>
+          </section>
+        )}
+        {page === "preferences" && (
+          <section className="section preferences-section">
+            <div className="eyebrow">STEP 02 OF 02 — OPTIONAL</div>
+            <h1>
+              Fine-tune your <em>vibe.</em>
+            </h1>
+            <p>
+              Answer anything you like, or skip straight to your
+              recommendations. You can change these later.
+            </p>
+            <div
+              className="progress-dots"
+              aria-label={
+                "Question " + (tasteStep + 1) + " of " + QUESTIONS.length
+              }
+            >
+              {QUESTIONS.map((item, i) => (
+                <span
+                  key={item.id}
+                  className={i === tasteStep ? "active" : ""}
+                />
+              ))}
+            </div>
+            <div className="preference-panel">
+              <h2>{QUESTIONS[tasteStep].title}</h2>
+              <div className="preference-options">
+                {QUESTIONS[tasteStep].options.map((option) => (
+                  <button
+                    key={option}
+                    className={
+                      (taste.preferences || {})[QUESTIONS[tasteStep].id] ===
+                      option
+                        ? "preference-choice chosen"
+                        : "preference-choice"
+                    }
+                    aria-pressed={
+                      (taste.preferences || {})[QUESTIONS[tasteStep].id] ===
+                      option
+                    }
+                    onClick={() =>
+                      setPreference(QUESTIONS[tasteStep].id, option)
+                    }
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="preference-actions">
+              <button
+                className="secondary"
+                onClick={() => TS((n) => Math.max(0, n - 1))}
+                disabled={tasteStep === 0}
+              >
+                ← Back
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  P("discover");
+                  TS(0);
+                }}
+              >
+                Skip questions
+              </button>
+              <button
+                className="primary"
+                onClick={() =>
+                  tasteStep === QUESTIONS.length - 1
+                    ? (P("discover"), TS(0))
+                    : TS((n) => n + 1)
+                }
+              >
+                {tasteStep === QUESTIONS.length - 1
+                  ? "Start discovering →"
+                  : "Next →"}
+              </button>
+            </div>
+          </section>
+        )}
+        {page === "discover" && (
+          <section className="section">
+            <div className="eyebrow">CURATED FOR YOUR VIBE</div>
+            <h1>
+              Your next <em>obsession.</em>
+            </h1>
+            <p>
+              AI ranks real TMDB titles based on what you love. React to picks
+              to shape your taste.
+            </p>
+            {search}
+            <div className="toolbar">
+              <div>
+                <span className="eyebrow">
+                  {q.trim().length >= 2
+                    ? "SEARCH RESULTS"
+                    : picks.length
+                      ? "PERSONALIZED FOR YOU"
+                      : "YOUR NEXT WATCH"}
+                </span>
+                <h2>
+                  {q.trim().length >= 2
+                    ? "Explore titles"
+                    : picks.length
+                      ? "The lineup"
+                      : "Ready when you are"}
+                </h2>
+              </div>
+              <button className="secondary" disabled={busy} onClick={recommend}>
+                {busy
+                  ? "Finding your picks…"
+                  : picks.length
+                    ? "↻ Refresh AI picks"
+                    : "✦ Get AI recommendations"}
+              </button>
+            </div>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {busy && (
+              <p className="loading-note" role="status">
+                Finding verified titles and ranking them for you…
+              </p>
+            )}
+            {q.trim().length >= 2 ? (
+              cards(results, "check")
+            ) : picks.length ? (
+              cards(picks, "feedback")
+            ) : (
+              <div className="empty">
+                {taste.favorites.length
+                  ? "Press “Get AI recommendations” to find your next watch."
+                  : "Add some favorites first so AI can learn your taste."}
+                <div>
+                  <button className="secondary" onClick={() => P("onboard")}>
+                    + Choose favorites
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+        {page === "check" && (
+          <section className="section">
+            <div className="eyebrow">CHECK A MATCH</div>
+            <h1>
+              Is it <em>your vibe?</em>
+            </h1>
+            <p>
+              Search any title. ReelMatch will predict how well it fits your
+              taste.
+            </p>
+            {search}
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {selected && (
+              <div className="selected-title">
+                <Poster x={selected} />
+                <div>
+                  <div className="eyebrow">MATCH ANALYSIS</div>
+                  <h2>
+                    {selected.title}{" "}
+                    <span className="muted">{selected.year}</span>
+                  </h2>
+                  {busy ? (
+                    <p>Analyzing your taste…</p>
+                  ) : match ? (
+                    <>
+                      <h3 className="category">{match.category}</h3>
+                      <p>{match.reason}</p>
+                    </>
+                  ) : (
+                    <p>Select a title to check your match.</p>
+                  )}
+                  <button
+                    className="secondary"
+                    onClick={() => favorite(selected)}
+                  >
+                    {liked(selected) ? "Remove favorite" : "+ Add favorite"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {q.trim().length >= 2 && cards(results, "check")}
+          </section>
+        )}
+        {page === "taste" && (
+          <section className="section">
+            <div className="eyebrow">YOUR COLLECTION</div>
+            <h1>
+              My <em>Taste.</em>
+            </h1>
+            <p>
+              {taste.favorites.length} favorites ·{" "}
+              {Object.keys(taste.feedback).length} reactions. Saved in this
+              browser.
+            </p>
+            <div className="taste-actions">
+              <button className="secondary" onClick={() => P("onboard")}>
+                + Add favorites
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  TS(0);
+                  P("preferences");
+                }}
+              >
+                Edit preferences
+              </button>
+              <button className="secondary" onClick={() => SH((v) => !v)}>
+                {showHistory ? "Hide" : "Show"} discovery history (
+                {taste.history.length})
+              </button>
+            </div>
+            {showHistory && (
+              <div className="history-note">
+                ReelMatch remembers {taste.history.length} recently recommended
+                titles in this browser to reduce repeats. This history is used
+                for ranking, not as a watched list.{" "}
+                <button
+                  className="small-button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Clear recommendation history? Your favorites and reactions will stay saved.",
+                      )
+                    )
+                      T((t) => ({ ...t, history: [] }));
+                  }}
+                >
+                  Clear history
+                </button>
+              </div>
+            )}
+            <h2 className="collection-title">Favorites</h2>
+            {taste.favorites.length ? (
+              cards(taste.favorites)
+            ) : (
+              <div className="empty">
+                No favorites yet. Add a few titles to start shaping your taste.
+              </div>
+            )}
+            {[
+              ["love", "Loved It"],
+              ["watch", "Want to Watch"],
+              ["seen", "Already Seen"],
+              ["no", "Not for Me"],
+            ].map(([v, label]) => {
+              const items = Object.values(taste.feedback).filter(
+                (x) => x.value === v,
+              );
+              return (
+                <section key={v} className="taste-group">
+                  <h2 className="collection-title">
+                    {label} <span className="muted">({items.length})</span>
+                  </h2>
+                  {items.length ? (
+                    <div className="taste-list">
+                      {items.map((x) => (
+                        <div className="taste-row" key={key(x)}>
+                          <button
+                            className="taste-poster"
+                            onClick={() => check(x)}
+                            aria-label={"Check " + x.title}
+                          >
+                            <Poster x={x} />
+                          </button>
+                          <div className="taste-row-info">
+                            <strong>{x.title}</strong>
+                            <span className="muted">
+                              {x.year || "Unknown year"} ·{" "}
+                              {x.type === "tv" ? "TV" : "Movie"}
+                            </span>
+                          </div>
+                          <button
+                            className="small-button"
+                            onClick={() => feedback(x, v)}
+                            aria-label={"Remove " + label + " from " + x.title}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No titles here yet.</p>
+                  )}
+                </section>
+              );
+            })}
+          </section>
+        )}
+      </main>
+      <footer>
+        <div>
+          <strong>
+            reel<span>match.</span>
+          </strong>
+          <p>Made for the indecisive movie lover.</p>
+        </div>
+        <div className="attribution">
+          <img src="/tmdb-logo.svg" alt="TMDB logo" />
+          <p>
+            This product uses the TMDB API but is not endorsed or certified by
+            TMDB.
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+createRoot(document.getElementById("root")).render(<App />);
