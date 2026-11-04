@@ -156,17 +156,22 @@ app.get("/api/search", async (req, res) => {
   if (q.length < 2)
     return res.status(400).json({ error: "Enter at least two characters." });
   try {
-    const data = await tmdb("search/multi", {
-      query: q,
-      include_adult: "false",
-      language: "en-US",
-    });
-    res.json(
-      (data.results || [])
-        .filter((x) => ["movie", "tv"].includes(x.media_type))
-        .slice(0, 16)
-        .map((x) => movie(x)),
-    );
+    const [movieData, tvData] = await Promise.all([
+      tmdb("search/movie", { query: q, include_adult: "false", language: "en-US", page: 1 }),
+      tmdb("search/tv", { query: q, include_adult: "false", language: "en-US", page: 1 }),
+    ]);
+    const normalizedQuery = q.toLocaleLowerCase();
+    const rank = (item) => {
+      const title = item.title.toLocaleLowerCase();
+      if (title === normalizedQuery) return 0;
+      if (title.startsWith(normalizedQuery)) return 1;
+      return 2;
+    };
+    const results = [
+      ...(movieData.results || []).map((x) => movie(x, "movie")),
+      ...(tvData.results || []).map((x) => movie(x, "tv")),
+    ].filter((x) => x.poster && x.title).sort((a, b) => rank(a) - rank(b) || b.popularity - a.popularity);
+    res.json(results.slice(0, 24));
   } catch (e) {
     fail(res, e, "Search");
   }
