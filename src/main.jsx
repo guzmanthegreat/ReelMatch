@@ -113,6 +113,7 @@ function App() {
   const [returnPage, setReturnPage] = useState("discover");
   const initialFavorites = useRef(read().favorites.length > 0);
   const autoRequested = useRef(false);
+  const searchRequestRef = useRef(0);
 
   useEffect(() => localStorage.setItem(STORE, JSON.stringify(taste)), [taste]);
   useEffect(() => {
@@ -140,11 +141,23 @@ function App() {
     return () => { button.removeEventListener("click", goBack); button.remove(); };
   }, [page, returnPage, taste.favorites.length]);
   useEffect(() => {
-    if (q.trim().length < 2) { R([]); return; }
+    const requestId = ++searchRequestRef.current;
+    if (q.trim().length < 2) { R([]); SB(false); return; }
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
       SB(true);
-      api(`/api/search?query=${encodeURIComponent(q)}`, { signal: ctrl.signal }).then((d) => { R(Array.isArray(d) ? d : []); E(""); }).catch((e) => { if (e.name !== "AbortError") E(e.message); }).finally(() => { if (!ctrl.signal.aborted) SB(false); });
+      api(`/api/search?query=${encodeURIComponent(q)}`, { signal: ctrl.signal })
+        .then((d) => {
+          if (requestId !== searchRequestRef.current) return;
+          R(Array.isArray(d) ? d : []);
+          E("");
+        })
+        .catch((e) => {
+          if (e.name !== "AbortError" && requestId === searchRequestRef.current) E(e.message);
+        })
+        .finally(() => {
+          if (!ctrl.signal.aborted && requestId === searchRequestRef.current) SB(false);
+        });
     }, 300);
     return () => { clearTimeout(timer); ctrl.abort(); };
   }, [q]);
