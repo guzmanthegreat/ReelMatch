@@ -28,7 +28,7 @@ function Carousel({ items, mode, liked, favorite, check }) {
   const viewportRef = useRef(null);
   const trackRef = useRef(null);
   const [visible, setVisible] = useState(1);
-  const uniqueItems = Array.from(new Map(items.map((x) => [titleKey(x), x])).values()).filter((x) => titleKey(x));
+  const uniqueItems = Array.from(new Map(items.map((x) => [key(x), x])).values()).filter((x) => titleKey(x));
   const count = uniqueItems.length;
   useEffect(() => {
     const update = () => {
