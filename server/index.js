@@ -600,3 +600,26 @@ app.get("/api/search", async (req, res) => {
     });
   }
 });
+
+const path = require("node:path");
+
+// Health check for Render
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, service: "ReelMatch" });
+});
+
+// Serve the production React website
+const distPath = path.join(__dirname, "../dist");
+
+app.use(express.static(distPath));
+
+// Handle frontend navigation without interfering with API routes
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "API route not found" });
+  }
+
+  if (req.method !== "GET") return next();
+
+  res.sendFile(path.join(distPath, "index.html"));
+});
