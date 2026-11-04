@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 const STORE = "reelmatch-ready-taste";
@@ -75,7 +75,17 @@ function App() {
     [pageNum, N] = useState(1),
     [tasteStep, TS] = useState(0),
     [showHistory, SH] = useState(false);
+  const initialFavorites = useRef(read().favorites.length > 0);
+  const autoRequested = useRef(false);
   useEffect(() => localStorage.setItem(STORE, JSON.stringify(taste)), [taste]);
+  useEffect(() => { if (initialFavorites.current) P("discover"); }, []);
+  useEffect(() => {
+    if (page === "discover" && taste.favorites.length && !picks.length && !autoRequested.current) {
+      autoRequested.current = true;
+      recommend();
+    }
+  }, [page, taste.favorites.length]);
+
   useEffect(() => {
     api("/api/health")
       .then(H)
@@ -135,9 +145,10 @@ function App() {
       preferences: { ...(t.preferences || {}), [id]: value },
     }));
   async function recommend() {
+    if (busy) return;
     if (!taste.favorites.length) {
       P("onboard");
-      E("Choose at least one favorite to personalize your recommendations.");
+      E("Pick a movie to continue.");
       return;
     }
     B(true);
@@ -148,7 +159,7 @@ function App() {
         exclude: taste.history,
         page: pageNum,
       });
-      K(d.results || []);
+      K(Array.isArray(d.results) ? d.results : []);
       T((t) => ({
         ...t,
         history: [
@@ -182,60 +193,24 @@ function App() {
     }
   }
   const cards = (items, mode = "favorite") => (
-    <div
-      className={
-        "poster-grid " + (mode === "favorite" ? "poster-carousel" : "")
-      }
-    >
+    <div className={"poster-grid " + (mode === "favorite" ? "poster-carousel" : "") }>
       {items.map((x) => (
-        <article className="poster-card" key={key(x)}>
-          <button
-            className="poster-open"
-            onClick={() => check(x)}
-            aria-label={"Check " + x.title}
-          >
+        <article className={"poster-card " + (mode === "favorite" && liked(x) ? "is-picked" : "")} key={key(x)}>
+          <button className="poster-open" onClick={() => mode === "favorite" ? favorite(x) : check(x)} aria-label={mode === "favorite" ? (liked(x) ? "Remove " : "Select ") + x.title : "See details for " + x.title}>
             <Poster x={x} />
+            {mode === "favorite" && <span className="poster-check">{liked(x) ? "✓" : "+"}</span>}
+            {mode !== "favorite" && x.category && <span className="poster-match">{x.category}</span>}
           </button>
-          <div className="card-details">
-            <strong title={x.title}>{x.title}</strong>
-            <span>
-              {x.year || "Unknown year"} · {x.type === "tv" ? "TV" : "Movie"}
-            </span>
-            {x.category && <span className="category">✦ {x.category}</span>}
-            {x.reason && (
-              <details className="reason">
-                <summary>Why this pick?</summary>
-                <p>{x.reason}</p>
-              </details>
-            )}
-            {mode === "favorite" ? (
-              <button
-                className={liked(x) ? "small-button selected" : "small-button"}
-                onClick={() => favorite(x)}
-              >
-                {liked(x) ? "✓ Favorite" : "+ Add favorite"}
-              </button>
-            ) : (
-              <div className="feedback" aria-label={"Feedback for " + x.title}>
-                {[
-                  ["love", "♥ Loved It"],
-                  ["watch", "＋ Want to Watch"],
-                  ["seen", "✓ Already Seen"],
-                  ["no", "✕ Not for Me"],
-                ].map(([v, label]) => (
-                  <button
-                    className={
-                      taste.feedback[key(x)]?.value === v ? "active" : ""
-                    }
-                    key={v}
-                    onClick={() => feedback(x, v)}
-                    aria-pressed={taste.feedback[key(x)]?.value === v}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="card-details"><strong title={x.title}>{x.title}</strong><span>{x.year || (x.type === "tv" ? "TV" : "Movie")}</span>
+            {mode !== "favorite" && <div className="quick-actions">
+              <button className={taste.feedback[key(x)]?.value === "watch" ? "active" : ""} onClick={() => feedback(x,"watch")} aria-label={"Save " + x.title}>＋ <span>Watchlist</span></button>
+              <button className={taste.feedback[key(x)]?.value === "love" ? "active" : ""} onClick={() => feedback(x,"love")} aria-label={"Love " + x.title}>♥</button>
+              <button className="more-action" onClick={() => check(x)}>Details ↗</button>
+              <details className="reaction-menu"><summary aria-label={"More reactions for " + x.title}>•••</summary><div className="reaction-options">
+                <button className={taste.feedback[key(x)]?.value === "seen" ? "active" : ""} onClick={() => feedback(x,"seen")}>Already seen</button>
+                <button className={taste.feedback[key(x)]?.value === "no" ? "active" : ""} onClick={() => feedback(x,"no")}>Not for me</button>
+              </div></details>
+            </div>}
           </div>
         </article>
       ))}
@@ -256,256 +231,54 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <button className="brand" onClick={() => P("welcome")}>
-          reel<span>match.</span>
-        </button>
+        <button className="brand" onClick={() => P(taste.favorites.length ? "discover" : "welcome")}>reel<span>match.</span></button>
         <nav aria-label="Main navigation">
-          {[
-            ["discover", "Discover"],
-            ["check", "Check a Match"],
-            ["taste", "My Taste"],
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              className={page === id ? "current" : ""}
-              onClick={() => {
-                P(id);
-                Q("");
-                E("");
-              }}
-            >
-              {label}
-            </button>
-          ))}
+          <button className={page === "discover" ? "current" : ""} onClick={() => {P(taste.favorites.length ? "discover" : "onboard"); E("");}}>Discover</button>
+          <button className={page === "taste" ? "current" : ""} onClick={() => {P("taste"); E("");}}>My Taste</button>
         </nav>
       </header>
       <main>
         {page === "welcome" && (
           <section className="hero">
-            <div className="eyebrow">MOVIE NIGHT, SORTED.</div>
-            <h1>
-              Less scrolling.
-              <br />
-              <em>More watching.</em>
-            </h1>
-            <p>Real titles. Your taste. AI picks with a personality.</p>
-            <button
-              className="primary"
-              onClick={() => {
-                P("onboard");
-                E("");
-              }}
-            >
-              Find My Next Watch ↗
-            </button>
-            <div className="hero-caption">
-              ✦ No signup &nbsp; ✦ Your taste, your rules &nbsp; ✦ Movies + TV
-            </div>
-            <div className="hero-orb" aria-hidden="true">
-              <span>
-                THE
-                <br />
-                NEXT
-                <br />
-                BIG
-                <br />
-                THING.
-              </span>
+            <div className="hero-backdrop" aria-hidden="true">{trending.slice(0,7).map(x => <div key={key(x)}><Poster x={x}/></div>)}</div>
+            <div className="hero-content"><div className="hero-kicker">REELMATCH</div><h1>Movie night,<br/><em>solved.</em></h1>
+              <p>Movies you'll actually love.</p>
+              <button className="primary hero-button" onClick={() => {P("onboard");E("");}}>Get Started <span>→</span></button>
             </div>
           </section>
         )}
         {page === "onboard" && (
-          <section className="section">
-            <div className="eyebrow">STEP 01 OF 02 — BUILD YOUR TASTE</div>
-            <h1>
-              What's your <em>obsession?</em>
-            </h1>
-            <p>
-              Pick your favorites. Search by name or browse trending titles. Add
-              as many as you like.
-            </p>
+          <section className="section onboarding">
+            <div className="step-label">STEP 1 OF 1</div>
+            <h1>Pick movies you <em>love.</em></h1>
+            <p>Tap at least one poster.</p>
             {search}
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            <div className="collection-heading">
-              <h2>
-                {q.trim().length >= 2 ? "Search results" : "Trending right now"}
-              </h2>
-              <span>Swipe to explore →</span>
-            </div>
+            {error && <p className="error" role="alert">{error}</p>}
+            {!trending.length && !error && q.trim().length < 2 && <p className="loading-note" role="status">Loading movies…</p>}
+            <div className="collection-heading"><h2>{q.trim().length >= 2 ? "Search results" : "Popular right now"}</h2><span>Scroll to explore →</span></div>
             {cards(q.trim().length >= 2 ? results : trending)}
-            <div className="sticky-next">
-              <span>{taste.favorites.length} favorites selected</span>
-              <button
-                className="primary"
-                disabled={!taste.favorites.length}
-                onClick={() => {
-                  P("preferences");
-                  Q("");
-                  E("");
-                }}
-              >
-                Continue →
-              </button>
-            </div>
-          </section>
-        )}
-        {page === "preferences" && (
-          <section className="section preferences-section">
-            <div className="eyebrow">STEP 02 OF 02 — OPTIONAL</div>
-            <h1>
-              Fine-tune your <em>vibe.</em>
-            </h1>
-            <p>
-              Answer anything you like, or skip straight to your
-              recommendations. You can change these later.
-            </p>
-            <div
-              className="progress-dots"
-              aria-label={
-                "Question " + (tasteStep + 1) + " of " + QUESTIONS.length
-              }
-            >
-              {QUESTIONS.map((item, i) => (
-                <span
-                  key={item.id}
-                  className={i === tasteStep ? "active" : ""}
-                />
-              ))}
-            </div>
-            <div className="preference-panel">
-              <h2>{QUESTIONS[tasteStep].title}</h2>
-              <div className="preference-options">
-                {QUESTIONS[tasteStep].options.map((option) => (
-                  <button
-                    key={option}
-                    className={
-                      (taste.preferences || {})[QUESTIONS[tasteStep].id] ===
-                      option
-                        ? "preference-choice chosen"
-                        : "preference-choice"
-                    }
-                    aria-pressed={
-                      (taste.preferences || {})[QUESTIONS[tasteStep].id] ===
-                      option
-                    }
-                    onClick={() =>
-                      setPreference(QUESTIONS[tasteStep].id, option)
-                    }
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="preference-actions">
-              <button
-                className="secondary"
-                onClick={() => TS((n) => Math.max(0, n - 1))}
-                disabled={tasteStep === 0}
-              >
-                ← Back
-              </button>
-              <button
-                className="secondary"
-                onClick={() => {
-                  P("discover");
-                  TS(0);
-                }}
-              >
-                Skip questions
-              </button>
-              <button
-                className="primary"
-                onClick={() =>
-                  tasteStep === QUESTIONS.length - 1
-                    ? (P("discover"), TS(0))
-                    : TS((n) => n + 1)
-                }
-              >
-                {tasteStep === QUESTIONS.length - 1
-                  ? "Start discovering →"
-                  : "Next →"}
-              </button>
-            </div>
+            <div className="sticky-next"><span><strong>{taste.favorites.length}</strong> selected</span>
+              <button className="primary" disabled={!taste.favorites.length} onClick={() => {autoRequested.current = false;P("discover");K([]);Q("");E("");}}>Find My Movies <span>→</span></button></div>
           </section>
         )}
         {page === "discover" && (
-          <section className="section">
-            <div className="eyebrow">CURATED FOR YOUR VIBE</div>
-            <h1>
-              Your next <em>obsession.</em>
-            </h1>
-            <p>
-              AI ranks real TMDB titles based on what you love. React to picks
-              to shape your taste.
-            </p>
-            {search}
-            <div className="toolbar">
-              <div>
-                <span className="eyebrow">
-                  {q.trim().length >= 2
-                    ? "SEARCH RESULTS"
-                    : picks.length
-                      ? "PERSONALIZED FOR YOU"
-                      : "YOUR NEXT WATCH"}
-                </span>
-                <h2>
-                  {q.trim().length >= 2
-                    ? "Explore titles"
-                    : picks.length
-                      ? "The lineup"
-                      : "Ready when you are"}
-                </h2>
-              </div>
-              <button className="secondary" disabled={busy} onClick={recommend}>
-                {busy
-                  ? "Finding your picks…"
-                  : picks.length
-                    ? "↻ Refresh AI picks"
-                    : "✦ Get AI recommendations"}
-              </button>
-            </div>
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            {busy && (
-              <p className="loading-note" role="status">
-                Finding verified titles and ranking them for you…
-              </p>
-            )}
-            {q.trim().length >= 2 ? (
-              cards(results, "check")
-            ) : picks.length ? (
-              cards(picks, "feedback")
-            ) : (
-              <div className="empty">
-                {taste.favorites.length
-                  ? "Press “Get AI recommendations” to find your next watch."
-                  : "Add some favorites first so AI can learn your taste."}
-                <div>
-                  <button className="secondary" onClick={() => P("onboard")}>
-                    + Choose favorites
-                  </button>
-                </div>
-              </div>
-            )}
+          <section className="section discover">
+            <div className="section-top"><div><div className="step-label">CURATED FOR YOU</div><h1>Your next <em>favorite.</em></h1></div>
+              <button className="secondary refresh" disabled={busy} onClick={recommend}>{busy ? "Finding…" : "↻ New picks"}</button></div>
+            {error && <p className="error" role="alert">{error}</p>}
+            {busy && <p className="loading-note" role="status">Finding your movies…</p>}
+            {picks.length ? cards(picks,"feedback") : !busy ? <div className="empty"><p>{taste.favorites.length ? "Your next movie is one click away." : "Pick some favorites to get started."}</p><button className="primary" onClick={() => taste.favorites.length ? recommend() : P("onboard")}>{taste.favorites.length ? "Find movies →" : "Pick favorites →"}</button></div> : null}
+            <div className="discover-bottom"><button className="secondary" onClick={() => {Q("");E("");P("check");}}>Search any movie ↗</button></div>
           </section>
         )}
         {page === "check" && (
           <section className="section">
-            <div className="eyebrow">CHECK A MATCH</div>
+            <div className="step-label">MOVIE DETAILS</div>
             <h1>
-              Is it <em>your vibe?</em>
+              Find a <em>movie.</em>
             </h1>
             <p>
-              Search any title. ReelMatch will predict how well it fits your
-              taste.
+              Search any title.
             </p>
             {search}
             {error && (
@@ -526,7 +299,7 @@ function App() {
                     <p>Analyzing your taste…</p>
                   ) : match ? (
                     <>
-                      <h3 className="category">{match.category}</h3>
+                      {match.category && <h3 className="category">{match.category}</h3>}
                       <p>{match.reason}</p>
                     </>
                   ) : (
@@ -546,33 +319,23 @@ function App() {
         )}
         {page === "taste" && (
           <section className="section">
-            <div className="eyebrow">YOUR COLLECTION</div>
+            <div className="step-label">YOUR COLLECTION</div>
             <h1>
               My <em>Taste.</em>
             </h1>
             <p>
-              {taste.favorites.length} favorites ·{" "}
-              {Object.keys(taste.feedback).length} reactions. Saved in this
-              browser.
+              Your favorites, all in one place.
             </p>
             <div className="taste-actions">
               <button className="secondary" onClick={() => P("onboard")}>
                 + Add favorites
               </button>
-              <button
-                className="secondary"
-                onClick={() => {
-                  TS(0);
-                  P("preferences");
-                }}
-              >
-                Edit preferences
-              </button>
-              <button className="secondary" onClick={() => SH((v) => !v)}>
+              <button className="secondary subtle-control" onClick={() => SH((v) => !v)}>
                 {showHistory ? "Hide" : "Show"} discovery history (
                 {taste.history.length})
               </button>
             </div>
+            <details className="taste-settings"><summary>Preferences</summary><div className="preference-panel">{QUESTIONS.map((question) => (<div className="preference-question" key={question.id}><h2>{question.title}</h2><div className="preference-options">{question.options.map((option) => (<button key={option} className={(taste.preferences || {})[question.id] === option ? "preference-choice chosen" : "preference-choice"} aria-pressed={(taste.preferences || {})[question.id] === option} onClick={() => setPreference(question.id, option)}>{option}</button>))}</div></div>))}</div></details>
             {showHistory && (
               <div className="history-note">
                 ReelMatch remembers {taste.history.length} recently recommended
@@ -611,10 +374,8 @@ function App() {
                 (x) => x.value === v,
               );
               return (
-                <section key={v} className="taste-group">
-                  <h2 className="collection-title">
-                    {label} <span className="muted">({items.length})</span>
-                  </h2>
+                <section key={v} className={items.length ? "taste-group" : "taste-group is-empty"}>
+                  {items.length > 0 && <h2 className="collection-title">{label} <span className="muted">({items.length})</span></h2>}
                   {items.length ? (
                     <div className="taste-list">
                       {items.map((x) => (
@@ -643,9 +404,7 @@ function App() {
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="muted">No titles here yet.</p>
-                  )}
+                  ) : null}
                 </section>
               );
             })}
