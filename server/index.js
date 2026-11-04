@@ -25,7 +25,6 @@ const validType = (x) =>
   Number.isSafeInteger(x.id) &&
   x.id > 0;
 const itemKey = (x) => `${x.type}:${x.id}`;
-const titleKey = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
 const categories = [
   "Perfect Match",
   "Highly Likely",
@@ -289,16 +288,12 @@ app.post("/api/recommend", aiGate, async (req, res) => {
     const ai = await askAI(prompt, schema, "reelmatch_recommendations");
     const map = new Map(pool.map((x) => [itemKey(x), x]));
     const used = new Set();
-    const usedTitles = new Set();
     const rows = (ai.rows || []).slice(0, 10).map((row, index) => ({
       title: cleanText(row.title, 60) || rowNames[index],
       items: (row.picks || []).map((pick) => {
-        const candidate = map.get(pick.id);
-        const normalizedTitle = titleKey(candidate?.title);
-        if (!candidate || used.has(pick.id) || !normalizedTitle || usedTitles.has(normalizedTitle)) return null;
+        if (!map.has(pick.id) || used.has(pick.id)) return null;
         used.add(pick.id);
-        usedTitles.add(normalizedTitle);
-        return { ...candidate, category: pick.category, reason: cleanText(pick.reason, 350) };
+        return { ...map.get(pick.id), category: pick.category, reason: cleanText(pick.reason, 350) };
       }).filter(Boolean).slice(0, 10),
     })).filter((row) => row.items.length);
     res.json({ rows });
