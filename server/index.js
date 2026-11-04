@@ -156,24 +156,35 @@ app.get("/api/search", async (req, res) => {
   if (q.length < 2)
     return res.status(400).json({ error: "Enter at least two characters." });
   try {
+    const normalizeSearch = (value) => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+    const normalizedQuery = normalizeSearch(q);
+    const titleValues = (x) => [x.title, x.name, x.original_title, x.original_name].map(normalizeSearch).filter(Boolean);
+    const hasExactTitle = (x) => titleValues(x).includes(normalizedQuery);
     const data = await tmdb("search/multi", {
       query: q,
       include_adult: "false",
       language: "en-US",
       page: 1,
     });
-    const normalizedQuery = q.toLocaleLowerCase();
+    let rawResults = (data.results || []).filter((x) => ["movie", "tv"].includes(x.media_type));
+    if (!rawResults.some(hasExactTitle)) {
+      const [movieData, tvData] = await Promise.all([
+        tmdb("search/movie", { query: q, include_adult: "false", language: "en-US", page: 1 }),
+        tmdb("search/tv", { query: q, include_adult: "false", language: "en-US", page: 1 }),
+      ]);
+      rawResults = [...rawResults, ...(movieData.results || []).map((x) => ({ ...x, media_type: "movie" })), ...(tvData.results || []).map((x) => ({ ...x, media_type: "tv" }))];
+    }
     const rank = (item) => {
-      const title = item.title.toLocaleLowerCase();
-      if (title === normalizedQuery) return 0;
-      if (title.startsWith(normalizedQuery)) return 1;
+      const titles = titleValues(item);
+      if (titles.includes(normalizedQuery)) return 0;
+      if (titles.some((title) => title.startsWith(normalizedQuery))) return 1;
       return 2;
     };
-    const results = (data.results || [])
-      .filter((x) => ["movie", "tv"].includes(x.media_type))
+    const seen = new Set();
+    const results = rawResults
+      .sort((a, b) => rank(a) - rank(b) || (b.popularity || 0) - (a.popularity || 0))
       .map((x) => movie(x, x.media_type))
-      .filter((x) => x.poster && x.title)
-      .sort((a, b) => rank(a) - rank(b) || b.popularity - a.popularity);
+      .filter((x) => x.poster && x.title && !seen.has(itemKey(x)) && seen.add(itemKey(x)));
     res.json(results.slice(0, 24));
   } catch (e) {
     fail(res, e, "Search");
