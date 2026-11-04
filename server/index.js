@@ -542,10 +542,6 @@ app.post("/api/discover", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`ReelMatch API running on port ${PORT}`);
-});
-
 //endpoint search
 app.get("/api/search", async (req, res) => {
   const query = req.query.query?.trim();
@@ -622,4 +618,8 @@ app.use((req, res, next) => {
   if (req.method !== "GET") return next();
 
   res.sendFile(path.join(distPath, "index.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`ReelMatch API running on port ${PORT}`);
 });
