@@ -1,181 +1,129 @@
 # ReelMatch
 
-**An AI-powered movie and TV recommendation application that helps users discover what to watch based on their personal taste.**
+**Less scrolling. More watching.**
 
-## Overview
+ReelMatch is an AI-powered movie and TV discovery app that helps you decide what to watch next. Pick titles you love, optionally describe your mood, and get personalized suggestions drawn from real titles in [The Movie Database (TMDB)](https://www.themoviedb.org/).
 
-ReelMatch helps solve a common problem: spending too much time searching for something to watch without knowing whether you'll actually enjoy it.
+**[Try ReelMatch live](https://reelmatch-01g2.onrender.com/)**
 
-Instead of relying entirely on popularity or general audience ratings, ReelMatch analyzes a user's favorite movies, TV shows, and viewing preferences to generate personalized compatibility assessments.
-
-The application uses five match categories:
-
-- **Perfect Match** — Exceptionally strong alignment with the user's preferences.
-- **Highly Likely** — Strong alignment with relatively few drawbacks.
-- **Worth a Watch** — Some appealing qualities, with meaningful uncertainties.
-- **Unlikely Match** — Several important mismatches.
-- **Not for You** — Strong conflicts with established preferences.
-
-These categories represent qualitative AI assessments, not statistically validated probabilities.
+> **Project status:** Public beta. The core user journey has been tested on the live Render deployment. Some security and operational improvements are still planned.
 
 ## Features
 
-- **Google Authentication:** Users can sign in securely using their Google account.
-- **Personalized Taste Profiles:** Users select three favorite movies or TV shows and answer three preference questions.
-- **Persistent Profiles:** Firebase Firestore stores preferences so they remain available across sessions.
-- **Movie and TV Search:** Search real titles using The Movie Database (TMDB) API.
-- **AI Compatibility Analysis:** Receive a personalized match category and explanation.
-- **Detailed Explanations:** Expand results to view additional reasoning and potential drawbacks.
-- **Movie Discovery:** Explore titles recommended by TMDB based on previously selected favorites.
-- **Prediction Caching:** Reuse predictions for the same movie and unchanged profile during the current application session.
+- **Guest-first onboarding:** Start without creating an account.
+- **Movie and TV search:** Find real titles with TMDB posters and metadata.
+- **Trending titles:** Browse what's popular this week.
+- **Personalized discovery:** OpenAI ranks a set of verified TMDB candidates based on favorites, optional preferences, and feedback.
+- **Check a Match:** Evaluate a specific title against your taste and get a short, spoiler-conscious explanation.
+- **Five match categories:** Perfect Match, Highly Likely, Worth a Watch, Unlikely Match, and Not for You.
+- **Taste and reactions:** Save favorites and mark recommendations **Loved It**, **Want to Watch**, **Already Seen**, or **Not for Me**.
+- **Saved local preferences:** Your taste, feedback, and recommendation history are stored in your browser.
 
-## Technology Stack
+Match categories are **qualitative AI assessments**, not calibrated probabilities or guarantees of enjoyment.
 
-| Technology              | Purpose                                   |
-| ----------------------- | ----------------------------------------- |
-| React                   | Frontend user interface                   |
-| Vite                    | Frontend development and build tool       |
-| Node.js                 | Backend JavaScript runtime                |
-| Express                 | Backend API                               |
-| Firebase Authentication | Google Sign-In                            |
-| Cloud Firestore         | User profile storage                      |
-| TMDB API                | Movie and TV metadata and recommendations |
-| OpenAI API              | AI-generated compatibility analysis       |
+## How it works
 
-## How ReelMatch Works
+1. Choose one or more favorite movies or TV shows.
+2. Optionally answer questions about mood, pacing, and preferred format.
+3. ReelMatch gathers real recommendation candidates and metadata from TMDB.
+4. The backend asks OpenAI to rank those verified candidates and explain the picks.
+5. React displays posters, match categories, and explanations; your feedback informs later requests.
 
-1. The user signs in with Google.
-2. The user selects three favorite movies or TV shows.
-3. The user answers three questions about pacing, storytelling, and atmosphere.
-4. ReelMatch saves the completed profile to Firestore.
-5. The user searches for a title or browses TMDB recommendations.
-6. The backend retrieves relevant movie metadata from TMDB.
-7. OpenAI evaluates the title against the user's preferences.
-8. ReelMatch displays a categorical match verdict, short explanation, and optional detailed analysis.
+The AI is instructed to rank **provided candidates only**, rather than invent titles. The backend checks returned IDs against its candidate pool before displaying them.
 
-## Prompt Engineering Techniques
+## Tech stack
 
-ReelMatch uses prompt engineering to guide its AI-generated compatibility assessments.
+| Layer | Technology |
+| --- | --- |
+| Interface | React, Vite, CSS |
+| API server | Node.js, Express |
+| Movie and TV data | TMDB API |
+| Personalized analysis | OpenAI Responses API |
+| Preference storage | Browser `localStorage` |
+| Deployment | Render (one web service for frontend and backend) |
 
-### 1. Persona Pattern
+The repository may still contain legacy Firebase-related dependencies or files. The current guest-first experience does **not** require Firebase sign-in or Firestore profile storage.
 
-The AI is instructed to act as a thoughtful movie and TV recommendation advisor.
-
-Example:
-
-> You are ReelMatch, a thoughtful movie and TV recommendation advisor.
-
-This establishes the AI's role and helps focus its responses on evaluating entertainment preferences rather than providing generic movie descriptions.
-
-### 2. Few-Shot Prompting
-
-The AI prompt contains examples showing how different viewing preferences can correspond to different match categories.
-
-For example, a user who enjoys philosophical science fiction may receive a stronger compatibility assessment for a thought-provoking science-fiction mystery than someone who primarily prefers lighthearted comedies.
-
-These examples demonstrate the expected classification task and help guide the model toward the defined categories.
-
-### Additional Prompt Controls
-
-The prompt also instructs the model to avoid inventing plot details, avoid major spoilers, account for uncertainty, and provide potential drawbacks.
-
-Structured JSON output ensures that responses contain the fields needed by the user interface.
-
-## Running ReelMatch Locally
+## Run locally
 
 ### Prerequisites
 
-- Node.js and npm
-- Firebase project with Google Authentication and Firestore configured
-- TMDB API Read Access Token
-- OpenAI API key with available credits
+- Node.js 22 or newer and npm
+- A [TMDB API Read Access Token](https://www.themoviedb.org/settings/api)
+- An [OpenAI API key](https://platform.openai.com/api-keys) with API access and available credit, for AI features
 
-### 1. Clone the Repository
+### Install
 
 ```bash
 git clone https://github.com/guzmanthegreat/ReelMatch.git
 cd ReelMatch
+npm ci --include=dev
 ```
 
-### 2. Install Frontend Dependencies
-
-```bash
-npm install
-```
-
-### 3. Install Backend Dependencies
-
-```bash
-cd server
-npm install
-```
-
-### 4. Configure Environment Variables
-
-Create `server/.env`:
+Create a `.env` file **in the project root** (do not commit it):
 
 ```dotenv
-TMDB_TOKEN=your_tmdb_read_access_token
-OPENAI_API_KEY=your_openai_api_key
+TMDB_READ_ACCESS_TOKEN=replace_with_your_tmdb_read_access_token
+OPENAI_API_KEY=replace_with_your_openai_api_key
+OPENAI_MODEL=replace_with_a_supported_model_available_to_your_account
+ENABLE_PUBLIC_AI=false
 PORT=3001
 ```
 
-Create `.env.local` in the project root:
+The backend also accepts `TMDB_TOKEN` as an alternative to `TMDB_READ_ACCESS_TOKEN`.
 
-```dotenv
-VITE_FIREBASE_API_KEY=your_firebase_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
-VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id
-VITE_FIREBASE_APP_ID=your_firebase_app_id
-```
-
-Firebase Authentication must have Google Sign-In enabled, and Firestore rules must restrict each user's profile to their authenticated user ID.
-
-Do not commit private API credentials or environment files to GitHub.
-
-### 5. Start the Backend
-
-From the `server` directory:
+### Build and run
 
 ```bash
-node index.js
+npm run build
+node server/index.js
 ```
 
-The backend runs on `http://localhost:3001`.
+Open **http://localhost:3001**. This runs the built React frontend and Express API together, matching the single-service deployment architecture. You can check the backend at **http://localhost:3001/api/health**.
 
-### 6. Start the Frontend
+To test AI locally, set `ENABLE_PUBLIC_AI=true` in your local `.env` and restart the server. This enables paid API requests; use only in a controlled development environment.
 
-In another terminal, from the project root:
+> `npm run dev` starts the Vite frontend alone. The current Vite configuration does not proxy `/api` requests, so use the production-style local commands above for full-stack testing.
 
-```bash
-npm run dev
-```
+## Deployment
 
-Open the local URL displayed by Vite. The default is usually `http://localhost:5173`, but Vite may choose another available port.
+ReelMatch is deployed as a single Render web service. The repository includes `render.yaml` with the build command, start command, and health-check path.
 
-The backend's CORS configuration must allow the frontend's local origin.
+| Setting | Value |
+| --- | --- |
+| Build | `npm ci --include=dev && npm run build` |
+| Start | `node server/index.js` |
+| Health check | `/api/health` |
 
-## Current Limitations
+Configure `TMDB_READ_ACCESS_TOKEN`, `OPENAI_API_KEY`, and `OPENAI_MODEL` in **Render → Environment**, not in GitHub. `ENABLE_PUBLIC_AI` controls whether the paid AI routes are available to visitors. The blueprint defaults this flag to `false`; confirm the deployed setting after any Blueprint changes.
 
-- Match categories are AI-generated qualitative assessments, not calibrated probabilities.
-- Discovery suggestions originate from TMDB and are not automatically ranked by the AI matching model.
-- Prediction caching lasts only for the current application session.
-- New users must provide three favorite titles and answer three questions.
-- The application currently runs in a local development environment.
-- Public deployment would require additional backend authentication, rate limiting, and API usage protection.
+**Security note:** The current AI limiter uses in-memory per-IP and global counters. These reset when the process restarts and are **not** a persistent spending cap. Review dependency audit warnings and strengthen abuse protection before broad promotion or scaling.
 
-## Future Improvements
+## Prompt engineering
 
-- User ratings and feedback to refine recommendations.
-- More advanced personalization and recommendation ranking.
-- Watchlists and viewing history.
-- Improved prediction consistency and evaluation.
-- Public deployment with production-ready API security.
+ReelMatch uses a **persona pattern** to guide the AI as a playful, spoiler-conscious movie advisor. It also uses **structured-output constraints** to request predictable JSON containing match categories, title IDs, and explanations. The prompts distinguish favorites from feedback such as **Want to Watch** and **Not for Me**.
 
-## Academic Project
+The current recommendation prompts do not establish a full few-shot or iterative-refinement implementation; those are possible future improvements.
 
-Developed for **CS 4680 — Prompt Engineering** at California State Polytechnic University, Pomona.
+## Roadmap
 
-The project demonstrates generative AI integration, prompt engineering patterns, personalized recommendations, API integration, and full-stack application development.
+- Persistent server-side guest profiles and optional accounts
+- Durable, abuse-resistant AI quotas and request caching
+- Automated integration and end-to-end tests
+- Improved recommendation diversity and feedback evaluation
+- Accessibility and performance refinements
+- Monetization only after licensing and operational review
+
+## TMDB attribution
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+Movie and TV metadata and posters are provided by [TMDB](https://www.themoviedb.org/). The website should display TMDB's official logo and attribution in accordance with TMDB's applicable branding and API terms. Review TMDB's commercial-use licensing before monetizing ReelMatch.
+
+## Academic context
+
+ReelMatch was developed as an AI assistant MVP for **CS 4680 — Prompt Engineering** at Cal Poly Pomona, with the longer-term goal of becoming a usable consumer product.
+
+## Repository
+
+Source code: [github.com/guzmanthegreat/ReelMatch](https://github.com/guzmanthegreat/ReelMatch)
