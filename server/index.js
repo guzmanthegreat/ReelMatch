@@ -301,6 +301,60 @@ app.post("/api/recommend", aiGate, async (req, res) => {
     fail(res, e, "Recommendations");
   }
 });
+function sse(res, event, data) {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+function matchPrompt(taste, selected) {
+  return `You are ReelMatch, a playful Gen Z friend who gives spoiler-free movie advice. Be warm, natural, and specific—not robotic, corporate, or overly formal. Your response must have exactly two parts: first, one line containing only one of these exact categories: ${categories.join(", ")}. Then, on the next line, write a short 2-3 sentence message that sounds like a friend texting a recommendation. You may start casually with words like "heyyy", "okayyy", or "wait", but do not overdo slang. Use only the provided TMDB details and user taste. Never invent plot points or claim the user watched something they did not provide.\nTaste: ${JSON.stringify(taste)}\nTitle: ${JSON.stringify(selected)}`;
+}
+app.post("/api/match/stream", aiGate, async (req, res) => {
+  const taste = validateTaste(req.body);
+  const title = req.body?.title;
+  if (!taste || !validType(title))
+    return res.status(400).json({ error: "Select a title and at least one favorite." });
+  res.set({ "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+  res.flushHeaders?.();
+  try {
+    const raw = await tmdb(`${title.type}/${title.id}`);
+    const selected = movie(raw, title.type);
+    const stream = await openai.responses.create({ model: MODEL, input: matchPrompt(taste, selected), max_output_tokens: 700, stream: true });
+    let header = "";
+    let pending = "";
+    let categorySent = false;
+    const sendWords = (text) => {
+      pending += text;
+      const parts = pending.split(/(?<=\s)/);
+      pending = parts.pop() || "";
+      parts.forEach((word) => sse(res, "delta", { text: word }));
+    };
+    for await (const event of stream) {
+      if (event.type !== "response.output_text.delta") continue;
+      const delta = event.delta || "";
+      if (!categorySent) {
+        header += delta;
+        const newline = header.search(/\r?\n/);
+        if (newline === -1) continue;
+        const category = header.slice(0, newline).trim();
+        const matched = categories.find((x) => x.toLowerCase() === category.toLowerCase()) || "Worth a Watch";
+        sse(res, "category", { category: matched });
+        categorySent = true;
+        sendWords(header.slice(newline + (header[newline] === "\r" ? 2 : 1)));
+      } else sendWords(delta);
+    }
+    if (!categorySent) {
+      const fallback = header.trim();
+      sse(res, "category", { category: categories.find((x) => fallback.toLowerCase().includes(x.toLowerCase())) || "Worth a Watch" });
+      sendWords(fallback);
+    }
+    if (pending) sse(res, "delta", { text: pending });
+    sse(res, "done", { title: selected });
+    res.end();
+  } catch (e) {
+    console.error("[ReelMatch] Match analysis stream:", e.status || "", e.message);
+    sse(res, "error", { error: e.status === 503 ? e.message : "Match analysis temporarily unavailable." });
+    res.end();
+  }
+});
 app.post("/api/match", aiGate, async (req, res) => {
   const taste = validateTaste(req.body);
   const title = req.body?.title;
@@ -311,7 +365,7 @@ app.post("/api/match", aiGate, async (req, res) => {
   try {
     const raw = await tmdb(`${title.type}/${title.id}`);
     const selected = movie(raw, title.type);
-    const prompt = `You are ReelMatch, a conversational, spoiler-free movie advisor. Use only provided TMDB details and user taste. Give one qualitative match category and a specific 2-3 sentence reason. No invented plot points.\nTaste: ${JSON.stringify(taste)}\nTitle: ${JSON.stringify(selected)}`;
+    const prompt = `You are ReelMatch, a playful Gen Z friend giving spoiler-free movie advice. Use only the provided TMDB details and user taste. Sound casual, warm, and specific, like a friend texting—not like an AI or corporate review. You may start with "heyyy", "okayyy", or "wait". Give one qualitative match category and a specific 2-3 sentence reason. No invented plot points.\nTaste: ${JSON.stringify(taste)}\nTitle: ${JSON.stringify(selected)}`;
     const schema = {
       type: "object",
       properties: {
