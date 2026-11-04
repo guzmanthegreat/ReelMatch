@@ -620,6 +620,51 @@ app.use((req, res, next) => {
   res.sendFile(path.join(distPath, "index.html"));
 });
 
+app.get("/api/trending", async (req, res) => {
+  try {
+    const response = await fetch(
+      "https://api.themoviedb.org/3/trending/all/week?language=en-US",
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.TMDB_TOKEN}`,
+          accept: "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      return res.status(502).json({
+        error: "Could not load trending titles.",
+      });
+    }
+
+    const data = await response.json();
+
+    const results = data.results
+      .filter(
+        (item) =>
+          (item.media_type === "movie" || item.media_type === "tv") &&
+          item.poster_path,
+      )
+      .slice(0, 18)
+      .map((item) => ({
+        id: item.id,
+        title: item.title || item.name,
+        type: item.media_type,
+        releaseDate: item.release_date || item.first_air_date || "",
+        poster: `https://image.tmdb.org/t/p/w185${item.poster_path}`,
+      }));
+
+    res.json({ results });
+  } catch (error) {
+    console.error("Trending error:", error.message);
+
+    res.status(500).json({
+      error: "Unable to load trending titles.",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`ReelMatch API running on port ${PORT}`);
 });
