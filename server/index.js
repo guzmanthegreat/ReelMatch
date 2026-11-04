@@ -207,16 +207,16 @@ app.get("/api/discovery", async (req, res) => {
 async function getCandidates(taste, page = 1) {
   const sources = taste.favorites.slice(0, 6);
   const responses = await Promise.all(
-    sources.map(async (f) => {
+    sources.flatMap((f) => [page, page + 1].map(async (sourcePage) => {
       try {
         return await tmdb(`${f.type}/${f.id}/recommendations`, {
-          page: Math.max(1, Math.min(3, page)),
+          page: Math.max(1, Math.min(3, sourcePage)),
           language: "en-US",
         });
       } catch {
         return { results: [] };
       }
-    }),
+    })),
   );
   const exclude = new Set(taste.favorites.map(itemKey));
   taste.feedback
@@ -225,7 +225,7 @@ async function getCandidates(taste, page = 1) {
   const out = new Map();
   responses.forEach((data, i) => {
     for (const x of data.results || []) {
-      const m = movie(x, sources[i].type);
+      const m = movie(x, sources[Math.floor(i / 2)].type);
       if (m.poster && m.title && !exclude.has(itemKey(m)))
         out.set(itemKey(m), m);
     }
@@ -235,7 +235,7 @@ async function getCandidates(taste, page = 1) {
       (a, b) =>
         b.rating * Math.log1p(b.voteCount) - a.rating * Math.log1p(a.voteCount),
     )
-    .slice(0, 60);
+    .slice(0, 100);
 }
 async function askAI(prompt, schema, name) {
   const r = await openai.responses.create({
@@ -263,9 +263,9 @@ app.post("/api/recommend", aiGate, async (req, res) => {
     let fresh = candidates.filter((x) => !excluded.has(itemKey(x)));
     if (!fresh.length) fresh = candidates;
     if (!fresh.length) return res.json({ results: [] });
-    const pool = fresh.slice(0, 60);
+    const pool = fresh.slice(0, 100);
     const rowNames = ["Best Matches", "More Like Your Favorites", "Hidden Gems", "Big Screen Energy", "Easy Watching", "Smart & Thought-Provoking", "High-Intensity Picks", "Feel-Good Picks", "Worth Exploring", "Wild Cards"];
-    const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Do not invent facts. Organize the candidates across exactly these rows: ${JSON.stringify(rowNames)}. Every row should contain 3 to 8 different candidate IDs when possible. A candidate may appear only once. Return a qualitative category and a specific concise reason for every pick.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
+    const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Do not invent facts. Organize the candidates across exactly these rows: ${JSON.stringify(rowNames)}. Each row should contain 6 to 10 different candidate IDs when possible. Every candidate ID may appear only once across the entire response, so never repeat a movie in another row. Return a qualitative category and a specific concise reason for every pick.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
     const schema = {
       type: "object",
       properties: {
@@ -294,7 +294,7 @@ app.post("/api/recommend", aiGate, async (req, res) => {
         if (!map.has(pick.id) || used.has(pick.id)) return null;
         used.add(pick.id);
         return { ...map.get(pick.id), category: pick.category, reason: cleanText(pick.reason, 350) };
-      }).filter(Boolean).slice(0, 8),
+      }).filter(Boolean).slice(0, 10),
     })).filter((row) => row.items.length);
     res.json({ rows });
   } catch (e) {

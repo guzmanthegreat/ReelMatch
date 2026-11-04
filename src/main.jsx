@@ -25,28 +25,36 @@ function categoryClass(category) { return `category-${(category || "").toLowerCa
 
 function Carousel({ items, mode, liked, favorite, check }) {
   const ref = useRef(null);
-  const repeated = items.length ? [...items, ...items, ...items] : [];
+  const looped = items.length > 1 ? [items[items.length - 1], ...items, items[0]] : items;
+  const stepSize = () => {
+    const el = ref.current;
+    const first = el?.firstElementChild;
+    if (!el || !first) return 0;
+    const gap = Number.parseFloat(getComputedStyle(el).gap) || 0;
+    return first.getBoundingClientRect().width + gap;
+  };
   const normalize = () => {
     const el = ref.current;
-    if (!el || !items.length) return;
-    const segment = el.scrollWidth / 3;
-    if (el.scrollLeft < segment * 0.45) el.scrollLeft += segment;
-    if (el.scrollLeft > segment * 1.55) el.scrollLeft -= segment;
+    const step = stepSize();
+    if (!el || !step || items.length < 2) return;
+    const max = el.scrollWidth - el.clientWidth;
+    if (el.scrollLeft <= step * 0.25) el.scrollLeft = step * items.length;
+    else if (max - el.scrollLeft <= step * 0.25) el.scrollLeft = step;
   };
   useEffect(() => {
     const el = ref.current;
-    if (el && items.length) requestAnimationFrame(() => { el.scrollLeft = el.scrollWidth / 3; });
+    if (el && items.length > 1) requestAnimationFrame(() => { el.scrollLeft = stepSize(); });
   }, [items.length]);
   const move = (direction) => {
     const el = ref.current;
     if (!el) return;
     el.scrollBy({ left: direction * Math.max(260, el.clientWidth * 0.72), behavior: "smooth" });
-    window.setTimeout(normalize, 420);
+    window.setTimeout(normalize, 450);
   };
   return <div className="carousel-shell">
     <button className="carousel-arrow carousel-prev" onClick={() => move(-1)} aria-label="Show previous titles">‹</button>
     <div className="poster-grid poster-carousel" ref={ref} onScroll={normalize}>
-      {repeated.map((x, index) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${index}`}>
+      {looped.map((x, index) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${index}`}>
         <button className="poster-open" onClick={() => mode === "favorite" ? favorite(x) : check(x)} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
           <Poster x={x} />
           {mode === "favorite" && <span className="poster-check">{liked(x) ? "✓" : "+"}</span>}
