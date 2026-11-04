@@ -53,6 +53,21 @@
   .poster-card .quick-actions .reaction-menu > summary { min-height: 36px; font-size: 11px; }
 }
 
+/* Journey, carousel rows, and match controls */
+.title-row{margin:42px 0}.title-row .poster-grid{margin-top:12px;margin-bottom:0}
+.section-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.sticky-next small{display:block;color:#bdaec6;font-size:12px;margin-top:4px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inline-loading{display:flex;align-items:center;gap:10px;color:#d9c4e5;background:#19131f;border:1px solid #3f2e4c;border-radius:12px;padding:14px 17px}
+.inline-loading:before{content:'';width:14px;height:14px;border:2px solid #68447e;border-top-color:#d19aff;border-radius:50%;animation:reelmatch-spin .85s linear infinite}
+.match-button{margin-top:9px;width:100%;border:1px solid #674477;background:#241a2d;color:#e8d8ef;border-radius:8px;padding:8px 9px;font-size:12px;font-weight:800;text-align:center}
+.match-button:hover{border-color:#c58af9;background:#332141;color:#fff}
+.detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+.reaction-control{border:1px solid #4d3b58;background:#211929;color:#e6d8ed;border-radius:9px;padding:10px 12px;font-size:12px;font-weight:700}
+.reaction-control:hover,.reaction-control.active,.active-control{background:#4d2b6a;border-color:#bd81f0;color:#fff}
+.category-perfect-match{color:#83e6a1!important}.category-highly-likely{color:#b8e879!important}.category-worth-a-watch{color:#f3db76!important}.category-unlikely-match{color:#f2a260!important}.category-not-for-you{color:#ff788b!important}
+.poster-match.category-perfect-match{background:#123b28e8}.poster-match.category-highly-likely{background:#30421be8}.poster-match.category-worth-a-watch{background:#4b3a12e8}.poster-match.category-unlikely-match{background:#4b2a16e8}.poster-match.category-not-for-you{background:#4b1825e8}
+@media(max-width:700px){.section-actions{width:100%;justify-content:flex-start}.section-actions button{flex:1}.sticky-next{align-items:flex-end}.sticky-next small{max-width:170px}.detail-actions button{flex:1}}
+
 /* One centered, non-wrapping action row. The overflow menu preserves other reactions. */
 .poster-card .quick-actions {
   display: grid;

@@ -183,6 +183,27 @@ app.get("/api/trending", async (req, res) => {
     fail(res, e, "Trending");
   }
 });
+const discoveryRows = [
+  ["Popular Movies", "movie", {}],
+  ["Popular TV Shows", "tv", {}],
+  ["Action & Adventure", "movie", { with_genres: "28,12" }],
+  ["Comedy", "movie", { with_genres: "35" }],
+  ["Drama", "movie", { with_genres: "18" }],
+  ["Science Fiction", "movie", { with_genres: "878" }],
+  ["Horror & Thriller", "movie", { with_genres: "27,53" }],
+  ["Romance", "movie", { with_genres: "10749" }],
+  ["Animation & Family", "movie", { with_genres: "16,10751" }],
+  ["Critically Loved TV", "tv", { sort_by: "vote_average.desc", "vote_count.gte": "250" }],
+];
+app.get("/api/discovery", async (req, res) => {
+  try {
+    const rows = await Promise.all(discoveryRows.map(async ([title, type, params]) => {
+      const data = await tmdb(`discover/${type}`, { ...params, language: "en-US", include_adult: "false", sort_by: params.sort_by || "popularity.desc" });
+      return { title, items: (data.results || []).filter((x) => x.poster_path).slice(0, 12).map((x) => movie(x, type)) };
+    }));
+    res.json({ rows });
+  } catch (e) { fail(res, e, "Discovery collections"); }
+});
 async function getCandidates(taste, page = 1) {
   const sources = taste.favorites.slice(0, 6);
   const responses = await Promise.all(
@@ -220,7 +241,7 @@ async function askAI(prompt, schema, name) {
   const r = await openai.responses.create({
     model: MODEL,
     input: prompt,
-    max_output_tokens: 1300,
+    max_output_tokens: 5000,
     text: { format: { type: "json_schema", name, strict: true, schema } },
   });
   if (!r.output_text) throw Error("AI returned no text");
@@ -242,43 +263,40 @@ app.post("/api/recommend", aiGate, async (req, res) => {
     let fresh = candidates.filter((x) => !excluded.has(itemKey(x)));
     if (!fresh.length) fresh = candidates;
     if (!fresh.length) return res.json({ results: [] });
-    const pool = fresh.slice(0, 35);
-    const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Don't invent facts. Return up to 12 candidate IDs, qualitative categories and specific concise reasons.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
+    const pool = fresh.slice(0, 60);
+    const rowNames = ["Best Matches", "More Like Your Favorites", "Hidden Gems", "Big Screen Energy", "Easy Watching", "Smart & Thought-Provoking", "High-Intensity Picks", "Feel-Good Picks", "Worth Exploring", "Wild Cards"];
+    const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Do not invent facts. Organize the candidates across exactly these rows: ${JSON.stringify(rowNames)}. Every row should contain 3 to 8 different candidate IDs when possible. A candidate may appear only once. Return a qualitative category and a specific concise reason for every pick.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
     const schema = {
       type: "object",
       properties: {
-        picks: {
+        rows: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              id: { type: "string" },
-              category: { type: "string", enum: categories },
-              reason: { type: "string" },
+              title: { type: "string" },
+              picks: { type: "array", items: { type: "object", properties: { id: { type: "string" }, category: { type: "string", enum: categories }, reason: { type: "string" } }, required: ["id", "category", "reason"], additionalProperties: false } },
             },
-            required: ["id", "category", "reason"],
+            required: ["title", "picks"],
             additionalProperties: false,
           },
         },
       },
-      required: ["picks"],
+      required: ["rows"],
       additionalProperties: false,
     };
     const ai = await askAI(prompt, schema, "reelmatch_recommendations");
     const map = new Map(pool.map((x) => [itemKey(x), x]));
     const used = new Set();
-    const results = [];
-    for (const pick of ai.picks || []) {
-      if (!map.has(pick.id) || used.has(pick.id)) continue;
-      used.add(pick.id);
-      results.push({
-        ...map.get(pick.id),
-        category: pick.category,
-        reason: cleanText(pick.reason, 350),
-      });
-      if (results.length >= 12) break;
-    }
-    res.json({ results });
+    const rows = (ai.rows || []).slice(0, 10).map((row, index) => ({
+      title: cleanText(row.title, 60) || rowNames[index],
+      items: (row.picks || []).map((pick) => {
+        if (!map.has(pick.id) || used.has(pick.id)) return null;
+        used.add(pick.id);
+        return { ...map.get(pick.id), category: pick.category, reason: cleanText(pick.reason, 350) };
+      }).filter(Boolean).slice(0, 8),
+    })).filter((row) => row.items.length);
+    res.json({ rows });
   } catch (e) {
     fail(res, e, "Recommendations");
   }
