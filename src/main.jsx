@@ -80,14 +80,14 @@ function Carousel({ items, mode, liked, favorite, check }) {
   return <div className="carousel-shell">
     {count > visible && <button className="carousel-arrow carousel-prev" onClick={() => move(-1)} aria-label="Show previous titles">‹</button>}
     <div className="poster-viewport" ref={viewportRef} onScroll={normalize}>
-      <div className="poster-grid poster-carousel" ref={trackRef}>
+      <div className={`poster-grid poster-carousel ${count <= visible ? "is-short" : ""}`} ref={trackRef}>
       {displayItems.map((x, itemIndex) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${itemIndex}`}>
         <button className="poster-open" onClick={() => { if (mode === "favorite") favorite(x); else check(x); }} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
           <Poster x={x} />
           {mode === "favorite" && <span className="poster-check">{liked(x) ? "✓" : "+"}</span>}
           {mode !== "favorite" && x.category && <span className={`poster-match ${categoryClass(x.category)}`}>{x.category}</span>}
         </button>
-        <div className="card-details"><strong title={x.title}>{x.title}</strong><span>{x.year || (x.type === "tv" ? "TV" : "Movie")}</span>{mode !== "favorite" && x.category && <span className={`category-badge ${categoryClass(x.category)}`}>{x.category}</span>}</div>
+        <div className="card-details"><strong title={x.title}>{x.title}</strong><span>{x.year || (x.type === "tv" ? "TV" : "Movie")}</span></div>
       </article>)}
       </div>
     </div>
@@ -180,7 +180,8 @@ function App() {
 
   async function check(x) {
     setReturnPage(page === "check" ? "discover" : page);
-    S(x); M({ category: null, reason: "" }); P("check"); Q(""); E(""); B(true);
+    const lockedCategory = x.category || null;
+    S(x); M({ category: lockedCategory, reason: "" }); P("check"); Q(""); E(""); B(true);
     try {
       const response = await fetch("/api/match/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload(), title: x }) });
       if (!response.ok) { const d = await response.json(); throw Error(d.error || "Match analysis failed."); }
@@ -193,7 +194,7 @@ function App() {
         const dataLine = block.split("\n").find((line) => line.startsWith("data:"));
         if (!dataLine) return;
         const data = JSON.parse(dataLine.slice(5).trim());
-        if (event === "category") M((current) => ({ ...current, category: data.category }));
+        if (event === "category" && !lockedCategory) M((current) => ({ ...current, category: data.category }));
         if (event === "delta") M((current) => ({ ...current, reason: `${current?.reason || ""}${data.text}` }));
         if (event === "error") throw Error(data.error || "Match analysis failed.");
       };

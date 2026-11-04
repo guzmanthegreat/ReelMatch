@@ -146,3 +146,4 @@
 .poster-viewport:active{cursor:grabbing}
 .poster-viewport.carousel-normalizing{scroll-behavior:auto}
 .poster-carousel{transform:none!important;min-width:max-content}
+.poster-carousel.is-short{justify-content:center;width:100%;min-width:100%}

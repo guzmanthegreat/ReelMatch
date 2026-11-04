@@ -266,7 +266,7 @@ app.post("/api/recommend", aiGate, async (req, res) => {
     let fresh = candidates.filter((x) => !excluded.has(itemKey(x)));
     if (!fresh.length) fresh = candidates;
     if (!fresh.length) return res.json({ results: [] });
-    const pool = fresh.slice(0, 80);
+    const pool = fresh.slice(0, 100);
     const rowNames = ["Best Matches", "More Like Your Favorites", "Hidden Gems", "Big Screen Energy", "Easy Watching", "Smart & Thought-Provoking", "High-Intensity Picks", "Feel-Good Picks", "Worth Exploring", "Wild Cards"];
     const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Do not invent facts. Organize candidates across exactly these rows: ${JSON.stringify(rowNames)}. Each row should contain 5 to 8 different candidate IDs when possible. Every candidate ID may appear only once across the entire response. Return only the category for each pick; do not write explanations here because explanations are generated on the match-details screen.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
     const schema = {
@@ -299,6 +299,14 @@ app.post("/api/recommend", aiGate, async (req, res) => {
         return { ...map.get(pick.id), category: pick.category, reason: cleanText(pick.reason, 350) };
       }).filter(Boolean).slice(0, 10),
     })).filter((row) => row.items.length);
+    const fallback = pool.filter((item) => !used.has(itemKey(item)));
+    rows.forEach((row) => {
+      while (row.items.length < 10 && fallback.length) {
+        const item = fallback.shift();
+        used.add(itemKey(item));
+        row.items.push({ ...item, category: "Worth a Watch", reason: "" });
+      }
+    });
     res.json({ rows });
   } catch (e) {
     fail(res, e, "Recommendations");
