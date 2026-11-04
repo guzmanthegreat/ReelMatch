@@ -240,11 +240,11 @@ async function getCandidates(taste, page = 1) {
     )
     .slice(0, 100);
 }
-async function askAI(prompt, schema, name) {
+async function askAI(prompt, schema, name, maxOutputTokens = 5000) {
   const r = await openai.responses.create({
     model: MODEL,
     input: prompt,
-    max_output_tokens: 5000,
+    max_output_tokens: maxOutputTokens,
     text: { format: { type: "json_schema", name, strict: true, schema } },
   });
   if (!r.output_text) throw Error("AI returned no text");
@@ -266,9 +266,9 @@ app.post("/api/recommend", aiGate, async (req, res) => {
     let fresh = candidates.filter((x) => !excluded.has(itemKey(x)));
     if (!fresh.length) fresh = candidates;
     if (!fresh.length) return res.json({ results: [] });
-    const pool = fresh.slice(0, 100);
+    const pool = fresh.slice(0, 80);
     const rowNames = ["Best Matches", "More Like Your Favorites", "Hidden Gems", "Big Screen Energy", "Easy Watching", "Smart & Thought-Provoking", "High-Intensity Picks", "Feel-Good Picks", "Worth Exploring", "Wild Cards"];
-    const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Do not invent facts. Organize the candidates across exactly these rows: ${JSON.stringify(rowNames)}. Each row should contain 6 to 10 different candidate IDs when possible. Every candidate ID may appear only once across the entire response, so never repeat a movie in another row. Return a qualitative category and a specific concise reason for every pick.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
+    const prompt = `You are ReelMatch, a playful but accurate spoiler-free film advisor. Rank verified candidate IDs only. Use favorites as strong positive signals; Loved It as positive; Not for Me as negative; Want to Watch as interest only; Already Seen as neutral. Preferences are optional. Do not invent facts. Organize candidates across exactly these rows: ${JSON.stringify(rowNames)}. Each row should contain 5 to 8 different candidate IDs when possible. Every candidate ID may appear only once across the entire response. Return only the category for each pick; do not write explanations here because explanations are generated on the match-details screen.\nTaste: ${JSON.stringify(taste)}\nCandidates: ${JSON.stringify(pool.map((x) => ({ id: itemKey(x), title: x.title, overview: x.overview, year: x.year, rating: x.rating })))}`;
     const schema = {
       type: "object",
       properties: {
@@ -278,7 +278,7 @@ app.post("/api/recommend", aiGate, async (req, res) => {
             type: "object",
             properties: {
               title: { type: "string" },
-              picks: { type: "array", items: { type: "object", properties: { id: { type: "string" }, category: { type: "string", enum: categories }, reason: { type: "string" } }, required: ["id", "category", "reason"], additionalProperties: false } },
+              picks: { type: "array", items: { type: "object", properties: { id: { type: "string" }, category: { type: "string", enum: categories } }, required: ["id", "category"], additionalProperties: false } },
             },
             required: ["title", "picks"],
             additionalProperties: false,
@@ -288,7 +288,7 @@ app.post("/api/recommend", aiGate, async (req, res) => {
       required: ["rows"],
       additionalProperties: false,
     };
-    const ai = await askAI(prompt, schema, "reelmatch_recommendations");
+    const ai = await askAI(prompt, schema, "reelmatch_recommendations", 3000);
     const map = new Map(pool.map((x) => [itemKey(x), x]));
     const used = new Set();
     const rows = (ai.rows || []).slice(0, 10).map((row, index) => ({

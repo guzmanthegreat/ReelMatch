@@ -19,7 +19,7 @@ function read() {
     return JSON.parse(localStorage.getItem(STORE)) || freshTaste();
   } catch { return freshTaste(); }
 }
-async function api(url, options) { const r = await fetch(url, options); const d = await r.json(); if (!r.ok) throw Error(d.error || "Request failed"); return d; }
+async function api(url, options) { const r = await fetch(url, options); const raw = await r.text(); let d = {}; try { d = raw ? JSON.parse(raw) : {}; } catch { d = {}; } if (!r.ok) throw Error(d.error || `Request failed (${r.status})`); return d; }
 const post = (url, data) => api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 function Poster({ x }) { return x.poster ? <img src={x.poster} alt={`${x.title} poster`} loading="lazy" /> : <div className="missing">No poster</div>; }
 function categoryClass(category) { return `category-${(category || "").toLowerCase().replaceAll(" ", "-")}`; }
@@ -30,8 +30,9 @@ function Carousel({ items, mode, liked, favorite, check }) {
   const [index, setIndex] = useState(1);
   const [visible, setVisible] = useState(1);
   const [transition, setTransition] = useState(true);
-  const [dragStart, setDragStart] = useState(null);
-  const uniqueItems = Array.from(new Map(items.map((x) => [x.title.trim().toLocaleLowerCase(), x])).values());
+  const dragStartRef = useRef(null);
+  const suppressClickRef = useRef(false);
+  const uniqueItems = Array.from(new Map(items.map((x) => [titleKey(x), x])).values()).filter((x) => titleKey(x));
   const count = uniqueItems.length;
   useEffect(() => {
     const update = () => {
@@ -57,20 +58,30 @@ function Carousel({ items, mode, liked, favorite, check }) {
       requestAnimationFrame(() => requestAnimationFrame(() => setTransition(true)));
     }
   };
-  const onPointerDown = (event) => setDragStart(event.clientX);
+  const onPointerDown = (event) => {
+    if (event.button !== 0) return;
+    dragStartRef.current = { x: event.clientX, pointerId: event.pointerId };
+    suppressClickRef.current = false;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
   const onPointerUp = (event) => {
-    if (dragStart == null) return;
-    const distance = event.clientX - dragStart;
-    if (Math.abs(distance) > 35) move(distance < 0 ? 1 : -1);
-    setDragStart(null);
+    const start = dragStartRef.current;
+    if (!start) return;
+    const distance = event.clientX - start.x;
+    if (Math.abs(distance) > 35) {
+      suppressClickRef.current = true;
+      move(distance < 0 ? 1 : -1);
+    }
+    dragStartRef.current = null;
+    event.currentTarget.releasePointerCapture?.(start.pointerId);
   };
   const displayItems = count > visible ? [uniqueItems[count - 1], ...uniqueItems, ...uniqueItems.slice(0, visible)] : uniqueItems;
   return <div className="carousel-shell">
     {count > visible && <button className="carousel-arrow carousel-prev" onClick={() => move(-1)} aria-label="Show previous titles">‹</button>}
-    <div className="poster-viewport" ref={viewportRef} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => setDragStart(null)}>
+    <div className="poster-viewport" ref={viewportRef} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { dragStartRef.current = null; }}>
       <div className="poster-grid poster-carousel" ref={trackRef} onTransitionEnd={onTransitionEnd} style={{ "--carousel-index": index, transition: transition ? undefined : "none" }}>
       {displayItems.map((x, itemIndex) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${itemIndex}`}>
-        <button className="poster-open" onClick={() => mode === "favorite" ? favorite(x) : check(x)} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
+        <button className="poster-open" onClick={(event) => { if (suppressClickRef.current) { event.preventDefault(); suppressClickRef.current = false; return; } if (mode === "favorite") favorite(x); else check(x); }} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
           <Poster x={x} />
           {mode === "favorite" && <span className="poster-check">{liked(x) ? "✓" : "+"}</span>}
           {mode !== "favorite" && x.category && <span className={`poster-match ${categoryClass(x.category)}`}>{x.category}</span>}
