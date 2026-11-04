@@ -114,3 +114,9 @@
 .section-actions{flex:1;justify-content:space-between;align-items:center}.section-actions .refresh{margin:0 auto}.section-actions .add-favorites{margin-right:auto}
 .analysis-category{font-size:12px;margin:6px 0 14px}.chat-bubble{display:flex;align-items:flex-start;gap:10px;max-width:680px;padding:15px 17px;border:1px solid #563c65;border-radius:6px 17px 17px 17px;background:linear-gradient(135deg,#2b1a39,#21162c);box-shadow:0 10px 30px #0003}.chat-avatar{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#b66bfa;color:#180d21;font:800 11px Manrope,sans-serif;text-transform:uppercase}.chat-bubble p{margin:2px 0 0;color:#f0e5f3;line-height:1.65}.typing-cursor{display:inline-block;width:2px;height:1em;margin-left:4px;vertical-align:-2px;background:#d19aff;animation:reelmatch-blink .8s steps(2,end) infinite}@keyframes reelmatch-blink{50%{opacity:0}}
 @media(max-width:700px){.carousel-arrow{width:30px;height:48px;font-size:28px}.carousel-shell{gap:4px}.section-actions{width:100%;justify-content:space-between}.section-actions .refresh{margin:0}.section-actions .add-favorites{margin-right:0}.finding-state{min-height:190px}.chat-bubble{padding:12px}.category-badge{font-size:10px}}
+
+/* Film-reel brand mark beside the wordmark. */
+.brand{display:inline-flex;align-items:center;gap:9px}
+.brand img{width:29px;height:29px;object-fit:contain;border-radius:50%}
+.brand-name span{color:#b66bfa}
+@media(max-width:700px){.brand img{width:25px;height:25px}.brand{gap:7px}}
