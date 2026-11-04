@@ -159,21 +159,13 @@ app.get("/api/search", async (req, res) => {
     const normalizeSearch = (value) => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
     const normalizedQuery = normalizeSearch(q);
     const titleValues = (x) => [x.title, x.name, x.original_title, x.original_name].map(normalizeSearch).filter(Boolean);
-    const hasExactTitle = (x) => titleValues(x).includes(normalizedQuery);
     const data = await tmdb("search/multi", {
       query: q,
       include_adult: "false",
       language: "en-US",
       page: 1,
     });
-    let rawResults = (data.results || []).filter((x) => ["movie", "tv"].includes(x.media_type));
-    if (!rawResults.some(hasExactTitle)) {
-      const [movieData, tvData] = await Promise.all([
-        tmdb("search/movie", { query: q, include_adult: "false", language: "en-US", page: 1 }),
-        tmdb("search/tv", { query: q, include_adult: "false", language: "en-US", page: 1 }),
-      ]);
-      rawResults = [...rawResults, ...(movieData.results || []).map((x) => ({ ...x, media_type: "movie" })), ...(tvData.results || []).map((x) => ({ ...x, media_type: "tv" }))];
-    }
+    const rawResults = (data.results || []).filter((x) => ["movie", "tv"].includes(x.media_type));
     const rank = (item) => {
       const titles = titleValues(item);
       if (titles.includes(normalizedQuery)) return 0;
@@ -185,8 +177,7 @@ app.get("/api/search", async (req, res) => {
       .sort((a, b) => rank(a) - rank(b) || (b.popularity || 0) - (a.popularity || 0))
       .map((x) => movie(x, x.media_type))
       .filter((x) => x.poster && x.title && !seen.has(itemKey(x)) && seen.add(itemKey(x)));
-    const exactResults = results.filter((x) => normalizeSearch(x.title) === normalizedQuery);
-    res.json((exactResults.length ? exactResults : results).slice(0, 24));
+    res.json(results.slice(0, 24));
   } catch (e) {
     fail(res, e, "Search");
   }
