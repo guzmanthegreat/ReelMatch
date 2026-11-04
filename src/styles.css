@@ -140,3 +140,9 @@
 .page-back{position:fixed;top:92px;left:max(5%,calc((100vw - 1220px)/2));z-index:35;border:1px solid #493754;border-radius:10px;background:#211a29;color:#f0e8f5;padding:10px 15px;font-weight:700;box-shadow:0 8px 24px #0005}
 .page-back:hover{border-color:#bb86ed;background:#2d203a}
 @media(max-width:700px){.page-back{top:78px;left:5%;padding:9px 13px;font-size:12px}}
+
+/* Native scrolling keeps wheel, trackpad, touch, and drag gestures working. */
+.poster-viewport{overflow-x:auto;overflow-y:visible;touch-action:auto;cursor:grab;scroll-behavior:smooth;scrollbar-width:thin}
+.poster-viewport:active{cursor:grabbing}
+.poster-viewport.carousel-normalizing{scroll-behavior:auto}
+.poster-carousel{transform:none!important;min-width:max-content}

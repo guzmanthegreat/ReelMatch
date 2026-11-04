@@ -27,67 +27,62 @@ function categoryClass(category) { return `category-${(category || "").toLowerCa
 function Carousel({ items, mode, liked, favorite, check }) {
   const viewportRef = useRef(null);
   const trackRef = useRef(null);
-  const [index, setIndex] = useState(1);
   const [visible, setVisible] = useState(1);
-  const [step, setStep] = useState(0);
-  const [transition, setTransition] = useState(true);
-  const dragStartRef = useRef(null);
-  const suppressClickRef = useRef(false);
-  const suppressTimerRef = useRef(null);
   const uniqueItems = Array.from(new Map(items.map((x) => [titleKey(x), x])).values()).filter((x) => titleKey(x));
   const count = uniqueItems.length;
   useEffect(() => {
     const update = () => {
       const width = viewportRef.current?.clientWidth || 0;
       const cardWidth = trackRef.current?.firstElementChild?.getBoundingClientRect().width || 158;
-      setStep(cardWidth + 12);
       setVisible(Math.max(1, Math.min(count || 1, Math.floor((width + 12) / (cardWidth + 12)))));
     };
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [count]);
-  useEffect(() => { setIndex(count > visible ? 1 : 0); setTransition(true); }, [items, count, visible]);
-  const move = (direction) => {
-    if (count <= visible) return;
-    setTransition(true);
-    setIndex((current) => current + direction);
+  const stepSize = () => {
+    const track = trackRef.current;
+    const card = track?.firstElementChild;
+    if (!track || !card) return 0;
+    const gap = Number.parseFloat(getComputedStyle(track).gap) || 0;
+    return card.getBoundingClientRect().width + gap;
   };
-  const onTransitionEnd = () => {
-    if (count <= visible) return;
-    if (index >= count + 1 || index <= 0) {
-      setTransition(false);
-      setIndex(index >= count + 1 ? 1 : count);
-      requestAnimationFrame(() => requestAnimationFrame(() => setTransition(true)));
+  const placeAtRealStart = () => {
+    const viewport = viewportRef.current;
+    const step = stepSize();
+    if (viewport && step && count > visible) viewport.scrollLeft = step * visible;
+  };
+  useEffect(() => {
+    requestAnimationFrame(placeAtRealStart);
+  }, [items, count, visible]);
+  const normalize = () => {
+    const viewport = viewportRef.current;
+    const step = stepSize();
+    if (!viewport || !step || count <= visible) return;
+    const realStart = step * visible;
+    const realEnd = realStart + step * count;
+    let target = null;
+    if (viewport.scrollLeft < realStart - step * 0.5) target = viewport.scrollLeft + step * count;
+    else if (viewport.scrollLeft >= realEnd - step * 0.5) target = viewport.scrollLeft - step * count;
+    if (target !== null) {
+      viewport.classList.add("carousel-normalizing");
+      viewport.scrollLeft = target;
+      requestAnimationFrame(() => viewport.classList.remove("carousel-normalizing"));
     }
   };
-  const onPointerDown = (event) => {
-    if (event.button !== 0) return;
-    window.clearTimeout(suppressTimerRef.current);
-    dragStartRef.current = { x: event.clientX, pointerId: event.pointerId };
-    suppressClickRef.current = false;
+  const move = (direction) => {
+    if (count <= visible) return;
+    const viewport = viewportRef.current;
+    const step = stepSize();
+    if (viewport && step) viewport.scrollBy({ left: direction * Math.max(step * 2, viewport.clientWidth * 0.72), behavior: "smooth" });
   };
-  const onPointerMove = (event) => {
-    const start = dragStartRef.current;
-    if (!start || start.moved) return;
-    const distance = event.clientX - start.x;
-    if (Math.abs(distance) <= 35) return;
-    start.moved = true;
-    suppressClickRef.current = true;
-    suppressTimerRef.current = window.setTimeout(() => { suppressClickRef.current = false; }, 450);
-    move(distance < 0 ? 1 : -1);
-  };
-  const onPointerUp = () => {
-    if (!dragStartRef.current) return;
-    dragStartRef.current = null;
-  };
-  const displayItems = count > visible ? [uniqueItems[count - 1], ...uniqueItems, ...uniqueItems.slice(0, visible)] : uniqueItems;
+  const displayItems = count > visible ? [...uniqueItems.slice(-visible), ...uniqueItems, ...uniqueItems.slice(0, visible)] : uniqueItems;
   return <div className="carousel-shell">
     {count > visible && <button className="carousel-arrow carousel-prev" onClick={() => move(-1)} aria-label="Show previous titles">‹</button>}
-    <div className="poster-viewport" ref={viewportRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { dragStartRef.current = null; }}>
-      <div className="poster-grid poster-carousel" ref={trackRef} onTransitionEnd={onTransitionEnd} style={{ transform: `translate3d(${-index * step}px, 0, 0)`, transition: transition ? undefined : "none" }}>
+    <div className="poster-viewport" ref={viewportRef} onScroll={normalize}>
+      <div className="poster-grid poster-carousel" ref={trackRef}>
       {displayItems.map((x, itemIndex) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${itemIndex}`}>
-        <button className="poster-open" onClick={(event) => { if (suppressClickRef.current) { event.preventDefault(); suppressClickRef.current = false; return; } if (mode === "favorite") favorite(x); else check(x); }} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
+        <button className="poster-open" onClick={() => { if (mode === "favorite") favorite(x); else check(x); }} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
           <Poster x={x} />
           {mode === "favorite" && <span className="poster-check">{liked(x) ? "✓" : "+"}</span>}
           {mode !== "favorite" && x.category && <span className={`poster-match ${categoryClass(x.category)}`}>{x.category}</span>}
