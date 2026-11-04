@@ -185,7 +185,8 @@ app.get("/api/search", async (req, res) => {
       .sort((a, b) => rank(a) - rank(b) || (b.popularity || 0) - (a.popularity || 0))
       .map((x) => movie(x, x.media_type))
       .filter((x) => x.poster && x.title && !seen.has(itemKey(x)) && seen.add(itemKey(x)));
-    res.json(results.slice(0, 24));
+    const exactResults = results.filter((x) => normalizeSearch(x.title) === normalizedQuery);
+    res.json((exactResults.length ? exactResults : results).slice(0, 24));
   } catch (e) {
     fail(res, e, "Search");
   }
