@@ -306,7 +306,7 @@ function App() {
         <button
           className="brand"
           onClick={() => {
-            P("onboard");
+            P("welcome");
             Q("");
             E("");
             window.scrollTo({ top: 0, behavior: "smooth" });
