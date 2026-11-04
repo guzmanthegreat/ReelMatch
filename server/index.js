@@ -25,6 +25,7 @@ const validType = (x) =>
   Number.isSafeInteger(x.id) &&
   x.id > 0;
 const itemKey = (x) => `${x.type}:${x.id}`;
+const titleKey = (x) => (x.title || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
 const categories = [
   "Perfect Match",
   "Highly Likely",
@@ -226,8 +227,10 @@ async function getCandidates(taste, page = 1) {
   responses.forEach((data, i) => {
     for (const x of data.results || []) {
       const m = movie(x, sources[Math.floor(i / 2)].type);
-      if (m.poster && m.title && !exclude.has(itemKey(m)))
-        out.set(itemKey(m), m);
+      if (m.poster && m.title && !exclude.has(itemKey(m))) {
+        const normalizedTitle = titleKey(m);
+        if (normalizedTitle && !out.has(normalizedTitle)) out.set(normalizedTitle, m);
+      }
     }
   });
   return [...out.values()]

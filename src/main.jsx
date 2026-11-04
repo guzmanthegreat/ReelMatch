@@ -5,6 +5,7 @@ import "./styles.css";
 const STORE = "reelmatch-ready-taste";
 const SESSION = "reelmatch-journey-started";
 const key = (x) => `${x.type}:${x.id}`;
+const titleKey = (x) => (x.title || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
 const QUESTIONS = [
   { id: "mood", title: "What are you in the mood for?", options: ["Surprise me", "Something intense", "Feel-good", "Mind-bending", "Easy watching"] },
   { id: "pace", title: "Your ideal pacing?", options: ["No preference", "Fast-paced", "Slow burn", "A bit of both"] },
@@ -24,37 +25,51 @@ function Poster({ x }) { return x.poster ? <img src={x.poster} alt={`${x.title} 
 function categoryClass(category) { return `category-${(category || "").toLowerCase().replaceAll(" ", "-")}`; }
 
 function Carousel({ items, mode, liked, favorite, check }) {
-  const ref = useRef(null);
-  const looped = items.length > 1 ? [items[items.length - 1], ...items, items[0]] : items;
-  const stepSize = () => {
-    const el = ref.current;
-    const first = el?.firstElementChild;
-    if (!el || !first) return 0;
-    const gap = Number.parseFloat(getComputedStyle(el).gap) || 0;
-    return first.getBoundingClientRect().width + gap;
-  };
-  const normalize = () => {
-    const el = ref.current;
-    const step = stepSize();
-    if (!el || !step || items.length < 2) return;
-    const max = el.scrollWidth - el.clientWidth;
-    if (el.scrollLeft <= step * 0.25) el.scrollLeft = step * items.length;
-    else if (max - el.scrollLeft <= step * 0.25) el.scrollLeft = step;
-  };
+  const viewportRef = useRef(null);
+  const trackRef = useRef(null);
+  const [index, setIndex] = useState(1);
+  const [visible, setVisible] = useState(1);
+  const [transition, setTransition] = useState(true);
+  const [dragStart, setDragStart] = useState(null);
+  const uniqueItems = Array.from(new Map(items.map((x) => [x.title.trim().toLocaleLowerCase(), x])).values());
+  const count = uniqueItems.length;
   useEffect(() => {
-    const el = ref.current;
-    if (el && items.length > 1) requestAnimationFrame(() => { el.scrollLeft = stepSize(); });
-  }, [items.length]);
+    const update = () => {
+      const width = viewportRef.current?.clientWidth || 0;
+      const cardWidth = trackRef.current?.firstElementChild?.getBoundingClientRect().width || 158;
+      setVisible(Math.max(1, Math.min(count || 1, Math.floor((width + 12) / (cardWidth + 12)))));
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [count]);
+  useEffect(() => { setIndex(count > visible ? 1 : 0); setTransition(true); }, [items, count, visible]);
   const move = (direction) => {
-    const el = ref.current;
-    if (!el) return;
-    el.scrollBy({ left: direction * Math.max(260, el.clientWidth * 0.72), behavior: "smooth" });
-    window.setTimeout(normalize, 450);
+    if (count <= visible) return;
+    setTransition(true);
+    setIndex((current) => current + direction);
   };
+  const onTransitionEnd = () => {
+    if (count <= visible) return;
+    if (index >= count + 1 || index <= 0) {
+      setTransition(false);
+      setIndex(index >= count + 1 ? 1 : count);
+      requestAnimationFrame(() => requestAnimationFrame(() => setTransition(true)));
+    }
+  };
+  const onPointerDown = (event) => setDragStart(event.clientX);
+  const onPointerUp = (event) => {
+    if (dragStart == null) return;
+    const distance = event.clientX - dragStart;
+    if (Math.abs(distance) > 35) move(distance < 0 ? 1 : -1);
+    setDragStart(null);
+  };
+  const displayItems = count > visible ? [uniqueItems[count - 1], ...uniqueItems, ...uniqueItems.slice(0, visible)] : uniqueItems;
   return <div className="carousel-shell">
-    <button className="carousel-arrow carousel-prev" onClick={() => move(-1)} aria-label="Show previous titles">‹</button>
-    <div className="poster-grid poster-carousel" ref={ref} onScroll={normalize}>
-      {looped.map((x, index) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${index}`}>
+    {count > visible && <button className="carousel-arrow carousel-prev" onClick={() => move(-1)} aria-label="Show previous titles">‹</button>}
+    <div className="poster-viewport" ref={viewportRef} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => setDragStart(null)}>
+      <div className="poster-grid poster-carousel" ref={trackRef} onTransitionEnd={onTransitionEnd} style={{ "--carousel-index": index, transition: transition ? undefined : "none" }}>
+      {displayItems.map((x, itemIndex) => <article className={`poster-card ${mode === "favorite" && liked(x) ? "is-picked" : ""}`} key={`${key(x)}-${itemIndex}`}>
         <button className="poster-open" onClick={() => mode === "favorite" ? favorite(x) : check(x)} aria-label={mode === "favorite" ? `${liked(x) ? "Remove" : "Select"} ${x.title}` : `See match details for ${x.title}`}>
           <Poster x={x} />
           {mode === "favorite" && <span className="poster-check">{liked(x) ? "✓" : "+"}</span>}
@@ -62,8 +77,9 @@ function Carousel({ items, mode, liked, favorite, check }) {
         </button>
         <div className="card-details"><strong title={x.title}>{x.title}</strong><span>{x.year || (x.type === "tv" ? "TV" : "Movie")}</span>{mode !== "favorite" && x.category && <span className={`category-badge ${categoryClass(x.category)}`}>{x.category}</span>}</div>
       </article>)}
+      </div>
     </div>
-    <button className="carousel-arrow carousel-next" onClick={() => move(1)} aria-label="Show next titles">›</button>
+    {count > visible && <button className="carousel-arrow carousel-next" onClick={() => move(1)} aria-label="Show next titles">›</button>}
   </div>;
 }
 
@@ -116,7 +132,16 @@ function App() {
     B(true); E("");
     try {
       const d = await post("/api/recommend", { ...payload(), exclude: taste.history, page: pageNum });
-      const rows = Array.isArray(d.rows) ? d.rows : [];
+      const usedTitles = new Set();
+      const rows = (Array.isArray(d.rows) ? d.rows : []).map((row) => ({
+        ...row,
+        items: (row.items || []).filter((item) => {
+          const normalized = titleKey(item);
+          if (!normalized || usedTitles.has(normalized)) return false;
+          usedTitles.add(normalized);
+          return true;
+        }),
+      })).filter((row) => row.items.length);
       RR(rows);
       const flat = rows.flatMap((row) => row.items || []);
       T((t) => ({ ...t, history: [...t.history.filter((k) => !flat.some((x) => key(x) === k)), ...flat.map(key)].slice(-250) }));
