@@ -3,8 +3,8 @@ services:
     name: reelmatch
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node server/index.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -16,4 +16,4 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt-6-luna
+        sync: false
