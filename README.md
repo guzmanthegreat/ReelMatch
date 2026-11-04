@@ -33,16 +33,14 @@ The AI is instructed to rank **provided candidates only**, rather than invent ti
 
 ## Tech stack
 
-| Layer | Technology |
-| --- | --- |
-| Interface | React, Vite, CSS |
-| API server | Node.js, Express |
-| Movie and TV data | TMDB API |
-| Personalized analysis | OpenAI Responses API |
-| Preference storage | Browser `localStorage` |
-| Deployment | Render (one web service for frontend and backend) |
-
-The repository may still contain legacy Firebase-related dependencies or files. The current guest-first experience does **not** require Firebase sign-in or Firestore profile storage.
+| Layer                 | Technology                                        |
+| --------------------- | ------------------------------------------------- |
+| Interface             | React, Vite, CSS                                  |
+| API server            | Node.js, Express                                  |
+| Movie and TV data     | TMDB API                                          |
+| Personalized analysis | OpenAI Responses API                              |
+| Preference storage    | Browser `localStorage`                            |
+| Deployment            | Render (one web service for frontend and backend) |
 
 ## Run locally
 
@@ -89,11 +87,11 @@ To test AI locally, set `ENABLE_PUBLIC_AI=true` in your local `.env` and restart
 
 ReelMatch is deployed as a single Render web service. The repository includes `render.yaml` with the build command, start command, and health-check path.
 
-| Setting | Value |
-| --- | --- |
-| Build | `npm ci --include=dev && npm run build` |
-| Start | `node server/index.js` |
-| Health check | `/api/health` |
+| Setting      | Value                                   |
+| ------------ | --------------------------------------- |
+| Build        | `npm ci --include=dev && npm run build` |
+| Start        | `node server/index.js`                  |
+| Health check | `/api/health`                           |
 
 Configure `TMDB_READ_ACCESS_TOKEN`, `OPENAI_API_KEY`, and `OPENAI_MODEL` in **Render → Environment**, not in GitHub. `ENABLE_PUBLIC_AI` controls whether the paid AI routes are available to visitors. The blueprint defaults this flag to `false`; confirm the deployed setting after any Blueprint changes.
 
