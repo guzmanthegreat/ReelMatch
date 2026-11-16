@@ -12,8 +12,11 @@ services:
       - key: NODE_ENV
         value: production
       - key: ENABLE_PUBLIC_AI
-        # Keep paid model calls off until Redis and provider spending limits
-        # have been configured in the Render dashboard.
+        # The demo enables AI so the matching flow works after deployment.
+        value: "true"
+      - key: ALLOW_IN_MEMORY_AI_LIMITS
+        # This beginner setup works without Redis. Redis is safer for larger
+        # public traffic because its limits survive server restarts.
         value: "true"
       - key: AI_PER_IP_LIMIT
         value: "20"

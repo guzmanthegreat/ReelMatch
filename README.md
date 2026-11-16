@@ -130,7 +130,7 @@ node server/index.js
 
 Then open [http://localhost:3001](http://localhost:3001). The health endpoint is available at [http://localhost:3001/api/health](http://localhost:3001/api/health).
 
-To test AI functionality locally, set `ENABLE_PUBLIC_AI=true`, configure the Upstash Redis REST credentials, and restart the server. This enables paid API requests, so it should only be used in a controlled development environment. For a disposable local-only test without Redis, set `ALLOW_IN_MEMORY_AI_LIMITS=true`; never use that fallback for public deployment.
+To test AI functionality locally, set `ENABLE_PUBLIC_AI=true` and restart the server. This enables paid API requests, so it should only be used in a controlled development environment. The beginner deployment uses the in-memory limiter; add the Upstash Redis credentials later if the app gets real traffic.
 
 > `npm run dev` starts Vite's frontend development server only. Since the current Vite configuration does not proxy `/api` requests, use the build-and-start commands above for a complete local test of the deployed architecture.
 
@@ -153,7 +153,7 @@ ReelMatch uses several controls around the OpenAI integration:
 - Candidate IDs are included in the prompt and validated against the server's candidate map after the response.
 - Favorites and feedback are separated into positive, neutral, and negative signals.
 - Match analysis uses the selected title's current TMDB details rather than relying on user-provided text.
-- AI requests are gated behind an environment flag and limited in memory by IP and process-wide counters.
+- AI requests are gated behind an environment flag and limited by IP and process-wide counters. Redis can make those limits durable later.
 
 The recommendation endpoint asks the model to rank verified candidates only. The model does not directly call TMDB and cannot add arbitrary titles to the result set.
 
@@ -172,8 +172,8 @@ Set `TMDB_READ_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_MODEL`, and `ENABLE_PUBL
 ## Current limitations
 
 - User profiles are browser-based; there is no account system or server-side synchronization.
-- Public AI is disabled in the checked-in Render blueprint by default. If you enable it, configure the Upstash Redis credentials and a provider-level spending limit first.
-- Redis quotas limit request volume, not dollar spend. Set a separate OpenAI project budget/alert as the final cost safeguard.
+- The checked-in Render blueprint enables AI with a simple in-memory request limiter so the demo works without Redis. This limiter resets when the server restarts and should be replaced with Redis before a larger public launch.
+- Request limits do not guarantee a dollar limit. Set an OpenAI project budget/alert as the final cost safeguard.
 - Recommendation and TMDB responses are not yet backed by a persistent cache.
 - Automated integration and end-to-end test coverage should be expanded before large-scale public use.
 - TMDB commercial-use and branding requirements should be reviewed before monetization.
