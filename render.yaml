@@ -14,11 +14,11 @@ services:
       - key: ENABLE_PUBLIC_AI
         # Keep paid model calls off until Redis and provider spending limits
         # have been configured in the Render dashboard.
-        value: 'false'
+        value: "true"
       - key: AI_PER_IP_LIMIT
-        value: '20'
+        value: "20"
       - key: AI_GLOBAL_LIMIT
-        value: '500'
+        value: "500"
       - key: UPSTASH_REDIS_REST_URL
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
