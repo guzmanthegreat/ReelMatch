@@ -112,6 +112,10 @@ TMDB_READ_ACCESS_TOKEN=replace_with_your_tmdb_read_access_token
 OPENAI_API_KEY=replace_with_your_openai_api_key
 OPENAI_MODEL=replace_with_a_supported_model
 ENABLE_PUBLIC_AI=false
+AI_PER_IP_LIMIT=20
+AI_GLOBAL_LIMIT=500
+UPSTASH_REDIS_REST_URL=replace_with_your_upstash_rest_url
+UPSTASH_REDIS_REST_TOKEN=replace_with_your_upstash_rest_token
 PORT=3001
 ```
 
@@ -126,7 +130,7 @@ node server/index.js
 
 Then open [http://localhost:3001](http://localhost:3001). The health endpoint is available at [http://localhost:3001/api/health](http://localhost:3001/api/health).
 
-To test AI functionality locally, set `ENABLE_PUBLIC_AI=true` and restart the server. This enables paid API requests, so it should only be used in a controlled development environment.
+To test AI functionality locally, set `ENABLE_PUBLIC_AI=true`, configure the Upstash Redis REST credentials, and restart the server. This enables paid API requests, so it should only be used in a controlled development environment. For a disposable local-only test without Redis, set `ALLOW_IN_MEMORY_AI_LIMITS=true`; never use that fallback for public deployment.
 
 > `npm run dev` starts Vite's frontend development server only. Since the current Vite configuration does not proxy `/api` requests, use the build-and-start commands above for a complete local test of the deployed architecture.
 
@@ -170,7 +174,8 @@ Set `TMDB_READ_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_MODEL`, and `ENABLE_PUBL
 ## Current limitations
 
 - User profiles are browser-based; there is no account system or server-side synchronization.
-- The AI request limiter is in-memory and resets when the process restarts. It is not a durable spending cap for a scaled production deployment.
+- Public AI is disabled in the checked-in Render blueprint by default. If you enable it, configure the Upstash Redis credentials and a provider-level spending limit first.
+- Redis quotas limit request volume, not dollar spend. Set a separate OpenAI project budget/alert as the final cost safeguard.
 - Recommendation and TMDB responses are not yet backed by a persistent cache.
 - Automated integration and end-to-end test coverage should be expanded before large-scale public use.
 - TMDB commercial-use and branding requirements should be reviewed before monetization.

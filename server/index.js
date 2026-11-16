@@ -1,15 +1,31 @@
 const express = require("express");
+const crypto = require("node:crypto");
 const path = require("node:path");
 require("dotenv").config();
 const OpenAI = require("openai");
 
 const app = express();
+// Hide the Express version header. The proxy setting lets req.ip use the real
+// visitor IP when this app is running behind Render's proxy.
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
+// Reject unusually large JSON bodies before they reach prompt-building code.
 app.use(express.json({ limit: "32kb" }));
 const PORT = Number(process.env.PORT) || 3001;
 const TMDB_TOKEN = process.env.TMDB_TOKEN || process.env.TMDB_READ_ACCESS_TOKEN;
 const AI_ENABLED = process.env.ENABLE_PUBLIC_AI === "true";
-const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const AI_WINDOW_MS = 60 * 60 * 1000;
+// These limits are intentionally configurable so production can tighten them
+// without changing code or redeploying a new build.
+const AI_PER_IP_LIMIT = Number(process.env.AI_PER_IP_LIMIT) || 20;
+const AI_GLOBAL_LIMIT = Number(process.env.AI_GLOBAL_LIMIT) || 500;
+// Upstash gives us a hosted Redis database that survives server restarts.
+// The REST API lets us use it without adding another npm dependency.
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+// This is only for local experiments. Never turn it on for a public server.
+const ALLOW_IN_MEMORY_AI_LIMITS = process.env.ALLOW_IN_MEMORY_AI_LIMITS === "true";
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -17,8 +33,11 @@ const openai = process.env.OPENAI_API_KEY
       maxRetries: 0,
     })
   : null;
+
+// These helpers keep IDs and titles consistent across validation, filtering,
+// recommendation deduplication, and the frontend's storage keys.
 const usage = new Map();
-let globalRequests = 0;
+let globalUsage = [];
 const validType = (x) =>
   x &&
   ["movie", "tv"].includes(x.type) &&
@@ -68,6 +87,8 @@ function validateTaste(body) {
   };
 }
 async function tmdb(route, params = {}) {
+  // TMDB is called only from the server so its access token never reaches the
+  // browser. The timeout prevents a slow upstream from hanging the page.
   if (!TMDB_TOKEN) {
     const e = new Error("TMDB is not configured");
     e.status = 503;
@@ -92,6 +113,8 @@ async function tmdb(route, params = {}) {
   return response.json();
 }
 function movie(x, type = x.media_type) {
+  // Convert TMDB's movie and TV response shapes into one small object that the
+  // React app can render without knowing TMDB's field-name differences.
   return {
     id: x.id,
     type,
@@ -108,6 +131,7 @@ function movie(x, type = x.media_type) {
   };
 }
 function fail(res, e, label) {
+  // Keep detailed errors in server logs while returning safer messages to users.
   console.error(`[ReelMatch] ${label}:`, e.status || "", e.message);
   res
     .status(e.status || 502)
@@ -115,7 +139,71 @@ function fail(res, e, label) {
       error: e.status === 503 ? e.message : `${label} temporarily unavailable.`,
     });
 }
-function aiGate(req, res, next) {
+async function redisIncrement(key) {
+  // Redis stores a number for each key. INCR atomically adds one to it,
+  // which is safe even when several users make requests at the same time.
+  if (!REDIS_URL || !REDIS_TOKEN) return null;
+  const response = await fetch(`${REDIS_URL}/incr/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!response.ok) throw new Error(`Redis quota request failed (${response.status})`);
+  const body = await response.json();
+  const value = Number(body.result);
+  if (!Number.isSafeInteger(value)) throw new Error("Redis returned an invalid quota value");
+  return value;
+}
+
+async function redisExpire(key, seconds) {
+  // Without an expiry, quota keys would remain in Redis forever. Expiring
+  // them keeps the database small and starts a fresh quota window later.
+  if (!REDIS_URL || !REDIS_TOKEN) return;
+  const response = await fetch(`${REDIS_URL}/expire/${encodeURIComponent(key)}/${seconds}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!response.ok) throw new Error(`Redis expiry request failed (${response.status})`);
+}
+
+async function checkDurableQuota(ip) {
+  // Both counters use the current hour in their key. That gives every hour
+  // a fresh pair of counters without needing a cleanup job.
+  const windowId = Math.floor(Date.now() / AI_WINDOW_MS);
+  // Hash the IP before storing it so the Redis database does not contain raw
+  // visitor IP addresses. The hash is still stable for rate limiting.
+  const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+  const ipKey = `reelmatch:ai:ip:${windowId}:${ipHash}`;
+  const globalKey = `reelmatch:ai:global:${windowId}`;
+  const [ipCount, globalCount] = await Promise.all([
+    redisIncrement(ipKey),
+    redisIncrement(globalKey),
+  ]);
+  if (ipCount === null || globalCount === null) return null;
+  // Only the first request needs to set the expiry. Later requests can
+  // reuse the same timer for this hour.
+  if (ipCount === 1) await redisExpire(ipKey, Math.ceil(AI_WINDOW_MS / 1000));
+  if (globalCount === 1) await redisExpire(globalKey, Math.ceil(AI_WINDOW_MS / 1000));
+  return ipCount <= AI_PER_IP_LIMIT && globalCount <= AI_GLOBAL_LIMIT;
+}
+
+function checkInMemoryQuota(ip) {
+  // This fallback is useful when developing offline, but it resets whenever
+  // Node restarts, so it is not safe enough for public paid AI traffic.
+  const now = Date.now();
+  const windowStart = now - AI_WINDOW_MS;
+  const times = (usage.get(ip) || []).filter((t) => t > windowStart);
+  globalUsage = globalUsage.filter((t) => t > windowStart);
+  if (times.length >= AI_PER_IP_LIMIT || globalUsage.length >= AI_GLOBAL_LIMIT)
+    return false;
+  times.push(now);
+  usage.set(ip, times);
+  globalUsage.push(now);
+  return true;
+}
+
+async function aiGate(req, res, next) {
   if (!AI_ENABLED)
     return res
       .status(503)
@@ -124,17 +212,29 @@ function aiGate(req, res, next) {
       });
   if (!openai) return res.status(503).json({ error: "AI is not configured." });
   const ip = req.ip;
-  const now = Date.now();
-  const times = (usage.get(ip) || []).filter((t) => now - t < 3600000);
-  if (times.length >= 20)
-    return res
-      .status(429)
-      .json({ error: "AI request limit reached. Please try again later." });
-  times.push(now);
-  usage.set(ip, times);
-  globalRequests++;
-  next();
+  try {
+    // Prefer durable Redis quotas. If Redis is not configured, only allow the
+    // explicitly opt-in local fallback; otherwise fail closed to protect cost.
+    const allowed = REDIS_URL && REDIS_TOKEN
+      ? await checkDurableQuota(ip)
+      : ALLOW_IN_MEMORY_AI_LIMITS
+        ? checkInMemoryQuota(ip)
+        : null;
+    if (allowed === null)
+      return res.status(503).json({
+        error: "AI protection is not configured. Public AI is temporarily unavailable.",
+      });
+    if (!allowed)
+      return res.status(429).json({ error: "AI request limit reached. Please try again later." });
+    next();
+  } catch (error) {
+    console.error("[ReelMatch] Durable AI quota check failed:", error.message);
+    return res.status(503).json({
+      error: "AI protection is temporarily unavailable. Please try again later.",
+    });
+  }
 }
+// Health checks expose configuration status, never secret values.
 app.get("/api/health", (req, res) =>
   res.json({
     ok: true,
@@ -144,6 +244,7 @@ app.get("/api/health", (req, res) =>
   }),
 );
 app.get("/api/test", async (req, res) => {
+  // This diagnostic route verifies that the server can reach TMDB.
   try {
     const x = await tmdb("movie/550");
     res.json({ connected: true, title: x.title, releaseDate: x.release_date });
@@ -152,6 +253,7 @@ app.get("/api/test", async (req, res) => {
   }
 });
 app.get("/api/search", async (req, res) => {
+  // Search stays server-side so the browser never needs a TMDB token.
   const q = cleanText(req.query.query || req.query.q, 100).trim();
   if (q.length < 2)
     return res.status(400).json({ error: "Enter at least two characters." });
@@ -183,6 +285,7 @@ app.get("/api/search", async (req, res) => {
   }
 });
 app.get("/api/trending", async (req, res) => {
+  // Trending is a lightweight discovery source and does not call OpenAI.
   try {
     const data = await tmdb("trending/all/week", { language: "en-US" });
     res.json({
@@ -195,6 +298,7 @@ app.get("/api/trending", async (req, res) => {
     fail(res, e, "Trending");
   }
 });
+// Each tuple defines one curated row: label, media type, and TMDB filters.
 const discoveryRows = [
   ["Popular Movies", "movie", {}],
   ["Popular TV Shows", "tv", {}],
@@ -208,6 +312,7 @@ const discoveryRows = [
   ["Critically Loved TV", "tv", { sort_by: "vote_average.desc", "vote_count.gte": "250" }],
 ];
 app.get("/api/discovery", async (req, res) => {
+  // Independent rows load in parallel instead of waiting one after another.
   try {
     const rows = await Promise.all(discoveryRows.map(async ([title, type, params]) => {
       const data = await tmdb(`discover/${type}`, { ...params, language: "en-US", include_adult: "false", sort_by: params.sort_by || "popularity.desc" });
@@ -217,6 +322,8 @@ app.get("/api/discovery", async (req, res) => {
   } catch (e) { fail(res, e, "Discovery collections"); }
 });
 async function getCandidates(taste, page = 1) {
+  // TMDB creates a verified candidate pool from the user's favorites. OpenAI
+  // ranks this pool later instead of inventing movie IDs.
   const sources = taste.favorites.slice(0, 6);
   const responses = await Promise.all(
     sources.flatMap((f) => [page, page + 1].map(async (sourcePage) => {
@@ -252,6 +359,8 @@ async function getCandidates(taste, page = 1) {
     .slice(0, 100);
 }
 async function askAI(prompt, schema, name, maxOutputTokens = 5000) {
+  // Structured output gives the server predictable JSON instead of parsing
+  // free-form model text and hoping it matches the frontend's expectations.
   const r = await openai.responses.create({
     model: MODEL,
     input: prompt,
@@ -261,6 +370,8 @@ async function askAI(prompt, schema, name, maxOutputTokens = 5000) {
   if (!r.output_text) throw Error("AI returned no text");
   return JSON.parse(r.output_text);
 }
+// Recommendation flow: validate taste -> fetch candidates -> ask AI to rank
+// them -> validate every returned ID -> send safe rows to the browser.
 app.post("/api/recommend", aiGate, async (req, res) => {
   const taste = validateTaste(req.body);
   if (!taste)
@@ -324,11 +435,16 @@ app.post("/api/recommend", aiGate, async (req, res) => {
   }
 });
 function sse(res, event, data) {
+  // SSE sends named events over one open HTTP response. The browser consumes
+  // category, delta, error, and done events as they arrive.
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 function matchPrompt(taste, selected) {
+  // Keeping prompt construction in one function makes the model's tone and
+  // spoiler-free rules easy to review or change later.
   return `You are ReelMatch, a charismatic Gen Z movie friend and influencer who is trying to get the user genuinely excited to watch a title. Be energetic, personal, persuasive, and natural—like a friend sending a voice note—not like an AI, critic, or corporate review. Your response must have exactly two parts: first, one line containing only one of these exact categories: ${categories.join(", ")}. Then, on the next line, write a short 2-3 sentence message. Start with an attention-grabbing hook such as "heyyy", "okayyy", "wait", or "listen". Connect the movie to the user's favorites, feedback, or preferences when relevant, explain the specific vibe they will get, and finish with a confident call to action such as "trust me, press play" or "add this immediately". Use 0-2 emojis naturally when they improve the tone, but do not overdo slang or emojis. Stay spoiler-free, honest, and specific. Use only the provided TMDB details and user taste. Never invent plot points or claim the user watched something they did not provide.\nTaste: ${JSON.stringify(taste)}\nTitle: ${JSON.stringify(selected)}`;
 }
+// Stream the explanation so the UI can show it progressively.
 app.post("/api/match/stream", aiGate, async (req, res) => {
   const taste = validateTaste(req.body);
   const title = req.body?.title;
@@ -377,6 +493,7 @@ app.post("/api/match/stream", aiGate, async (req, res) => {
     res.end();
   }
 });
+// Non-streaming equivalent for clients that prefer a normal JSON response.
 app.post("/api/match", aiGate, async (req, res) => {
   const taste = validateTaste(req.body);
   const title = req.body?.title;
@@ -404,6 +521,7 @@ app.post("/api/match", aiGate, async (req, res) => {
   }
 });
 const distPath = path.resolve(__dirname, "../dist");
+// In production Express serves the built Vite app and the API from one origin.
 app.use(express.static(distPath));
 app.use("/api", (req, res) =>
   res.status(404).json({ error: "API route not found." }),
@@ -416,3 +534,6 @@ if (require.main === module)
     console.log(`ReelMatch API running on port ${PORT}`),
   );
 module.exports = app;
+module.exports.validateTaste = validateTaste;
+module.exports.cleanText = cleanText;
+module.exports.categories = categories;

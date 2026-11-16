@@ -1,4 +1,6 @@
 services:
+  # Render builds the React client, then starts the same Node process that
+  # serves both the static site and the /api routes.
   - type: web
     name: reelmatch
     runtime: node
@@ -10,7 +12,17 @@ services:
       - key: NODE_ENV
         value: production
       - key: ENABLE_PUBLIC_AI
-        value: 'true'
+        # Keep paid model calls off until Redis and provider spending limits
+        # have been configured in the Render dashboard.
+        value: 'false'
+      - key: AI_PER_IP_LIMIT
+        value: '20'
+      - key: AI_GLOBAL_LIMIT
+        value: '500'
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
       - key: TMDB_READ_ACCESS_TOKEN
         sync: false
       - key: OPENAI_API_KEY

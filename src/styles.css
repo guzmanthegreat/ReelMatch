@@ -1,4 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+/* Global theme: dark purple surfaces keep posters and match badges prominent. */
 :root {
   font-family: "DM Sans", sans-serif;
   color: #f7f4fa;
@@ -10,9 +12,11 @@
   --accent: #b66bfa;
 }
 * {
+  /* Include borders and padding inside declared widths. */
   box-sizing: border-box;
 }
 body {
+  /* The radial glow gives the landing page depth without an image asset. */
   margin: 0;
   background:
     radial-gradient(ellipse at 50% 0%, #21152e 0%, transparent 45%), #0c0b10;
@@ -35,11 +39,13 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 .app {
+  /* Let the footer stay at the bottom even on short screens. */
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 .header {
+  /* Sticky navigation keeps the two main destinations available while scrolling. */
   height: 76px;
   position: sticky;
   top: 0;
@@ -53,6 +59,7 @@ summary:focus-visible {
   border-bottom: 1px solid #ffffff12;
 }
 .brand {
+  /* The brand is a button so clicking it always returns to the welcome screen. */
   background: none;
   border: 0;
   padding: 0;
@@ -67,6 +74,7 @@ footer strong span {
   color: #b66bfa;
 }
 nav {
+  /* Navigation buttons remain compact on desktop and wrap on small screens. */
   display: flex;
   gap: 10px;
 }
@@ -88,6 +96,7 @@ main {
   flex: 1;
 }
 .hero {
+  /* The welcome screen is intentionally spacious and centered around one action. */
   min-height: min(730px, 85vh);
   position: relative;
   display: flex;
@@ -99,6 +108,7 @@ main {
   background: radial-gradient(ellipse at 50% 48%, #4a26667a, transparent 55%);
 }
 .hero-backdrop {
+  /* Decorative posters are visual context only; content remains readable above them. */
   position: absolute;
   inset: -15% -3%;
   display: flex;
@@ -124,6 +134,7 @@ main {
   object-fit: cover;
 }
 .hero:after {
+  /* A dark overlay improves text contrast over the poster collage. */
   content: "";
   position: absolute;
   inset: 0;
@@ -167,6 +178,7 @@ main {
   margin: 0 0 20px;
 }
 .primary {
+  /* Shared primary action styling makes the journey's next step obvious. */
   border: 0;
   background: #b56df5;
   color: #160d20;
@@ -187,6 +199,7 @@ main {
   min-width: 230px;
 }
 .section {
+  /* All non-hero pages share one centered reading width. */
   width: min(1220px, 90%);
   margin: 0 auto;
   padding: 68px 0 110px;
@@ -222,6 +235,7 @@ main {
   background: #2d203a;
 }
 .search {
+  /* Search is styled as a single control even though it contains an icon and input. */
   display: flex;
   align-items: center;
   gap: 13px;
@@ -268,6 +282,7 @@ main {
   color: #8e8298;
 }
 .poster-grid {
+  /* Cards use a grid so the same component works for rows and lists. */
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 24px;
@@ -286,9 +301,11 @@ main {
   scroll-snap-align: start;
 }
 .poster-card {
+  /* Fixed card width keeps carousel measurements predictable. */
   min-width: 0;
 }
 .poster-open {
+  /* The poster button owns the selection or detail interaction. */
   position: relative;
   width: 100%;
   aspect-ratio: 2/3;
@@ -340,6 +357,7 @@ main {
   color: #140b1a;
 }
 .poster-match {
+  /* Match labels sit over the artwork so users can scan recommendation strength. */
   position: absolute;
   bottom: 10px;
   left: 9px;
@@ -399,6 +417,7 @@ main {
   margin-left: auto;
 }
 .sticky-next {
+  /* Onboarding's action bar stays visible while the user reviews favorites. */
   position: sticky;
   bottom: 18px;
   z-index: 20;
@@ -425,6 +444,7 @@ main {
   margin-top: 20px;
 }
 .empty {
+  /* Empty states explain what action will unlock the next part of the product. */
   padding: 60px 25px;
   text-align: center;
   border: 1px dashed #4c3958;
@@ -447,10 +467,12 @@ main {
   color: #e6cffa;
 }
 .error {
+  /* Error text is visually distinct and also marked role=alert in the JSX. */
   background: #472432;
   color: #ffced8;
 }
 .selected-title {
+  /* Match detail layout pairs one poster with the streaming explanation. */
   display: grid;
   grid-template-columns: 200px 1fr;
   gap: 30px;
@@ -506,6 +528,7 @@ main {
   font-weight: 700;
 }
 .preference-panel {
+  /* Preferences are secondary controls, so they live in a collapsible panel. */
   padding: 15px 0;
 }
 .preference-question {
@@ -540,6 +563,7 @@ main {
   display: none;
 }
 .taste-list {
+  /* Feedback groups use a simple row layout instead of another carousel. */
   display: grid;
   gap: 10px;
 }
@@ -617,6 +641,7 @@ footer p {
   object-position: left;
 }
 @media (max-width: 1050px) {
+  /* Tablet layout reduces horizontal density before the phone breakpoint. */
   .poster-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 17px;
@@ -626,6 +651,7 @@ footer p {
   }
 }
 @media (max-width: 700px) {
+  /* Phone layout stacks controls and gives cards enough touch target space. */
   .header {
     height: 66px;
     padding: 0 5%;
@@ -707,6 +733,7 @@ footer p {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  /* Respect users who ask the browser to minimize animation. */
   *,
   *:before,
   *:after {

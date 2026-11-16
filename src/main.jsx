@@ -1,12 +1,22 @@
+/* oxlint-disable react/only-export-components */
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
+// These keys identify the browser storage entries used by ReelMatch.
+// Favorites and reactions survive a refresh; the session key prevents old
+// local data from unexpectedly appearing in a brand-new browser session.
 const STORE = "reelmatch-ready-taste";
 const SESSION = "reelmatch-journey-started";
+
+// TMDB IDs are only unique within a media type, so movie:550 and tv:550
+// must be treated as different titles.
 const key = (x) => `${x.type}:${x.id}`;
 const titleKey = (x) =>
   (x.title || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+
+// These questions shape the AI prompt. They are optional: favorites are the
+// required signal, while preferences help narrow the recommendation style.
 const QUESTIONS = [
   {
     id: "mood",
@@ -32,9 +42,13 @@ const QUESTIONS = [
 ];
 
 function freshTaste() {
+  // Keeping one predictable object shape makes storage and React updates
+  // simpler because every user starts with the same fields.
   return { favorites: [], feedback: {}, history: [], preferences: {} };
 }
 function read() {
+  // localStorage can be unavailable or contain invalid JSON, especially when
+  // a user has cleared data or browser privacy settings block storage.
   try {
     if (!sessionStorage.getItem(SESSION)) {
       sessionStorage.setItem(SESSION, "1");
@@ -46,6 +60,8 @@ function read() {
   }
 }
 async function api(url, options) {
+  // All JSON API calls go through one helper so errors are shown consistently
+  // instead of each screen having to repeat response parsing logic.
   const r = await fetch(url, options);
   const raw = await r.text();
   let d = {};
@@ -64,6 +80,8 @@ const post = (url, data) =>
     body: JSON.stringify(data),
   });
 function Poster({ x }) {
+  // Some TMDB records do not have artwork. A text placeholder keeps the card
+  // usable and prevents a broken image from disrupting the layout.
   return x.poster ? (
     <img src={x.poster} alt={`${x.title} poster`} loading="lazy" />
   ) : (
@@ -71,10 +89,14 @@ function Poster({ x }) {
   );
 }
 function categoryClass(category) {
+  // The server returns human-readable categories; CSS uses lowercase
+  // kebab-case class names to color each category consistently.
   return `category-${(category || "").toLowerCase().replaceAll(" ", "-")}`;
 }
 
 function Carousel({ items, mode, liked, favorite, check }) {
+  // Carousel is shared by onboarding, recommendations, search results, and
+  // the taste page. Its mode determines whether clicking selects or analyzes.
   const viewportRef = useRef(null);
   const trackRef = useRef(null);
   const [visible, setVisible] = useState(1);
@@ -82,6 +104,8 @@ function Carousel({ items, mode, liked, favorite, check }) {
     new Map(items.map((x) => [key(x), x])).values(),
   ).filter((x) => titleKey(x));
   const count = uniqueItems.length;
+  // The component measures the viewport so it knows how many cards are
+  // visible and can create a seamless loop without duplicating data in state.
   useEffect(() => {
     const update = () => {
       const width = viewportRef.current?.clientWidth || 0;
@@ -106,14 +130,17 @@ function Carousel({ items, mode, liked, favorite, check }) {
     const gap = Number.parseFloat(getComputedStyle(track).gap) || 0;
     return card.getBoundingClientRect().width + gap;
   };
-  const placeAtRealStart = () => {
-    const viewport = viewportRef.current;
-    const step = stepSize();
-    if (viewport && step && count > visible)
-      viewport.scrollLeft = step * visible;
-  };
   useEffect(() => {
-    requestAnimationFrame(placeAtRealStart);
+    const frame = requestAnimationFrame(() => {
+      const viewport = viewportRef.current;
+      const track = trackRef.current;
+      const card = track?.firstElementChild;
+      const gap = Number.parseFloat(track ? getComputedStyle(track).gap : "0") || 0;
+      const step = (card?.getBoundingClientRect().width || 0) + gap;
+      if (viewport && step && count > visible)
+        viewport.scrollLeft = step * visible;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [items, count, visible]);
   const normalize = () => {
     const viewport = viewportRef.current;
@@ -135,6 +162,8 @@ function Carousel({ items, mode, liked, favorite, check }) {
     }
   };
   const move = (direction) => {
+    // Moving by most of a viewport feels natural with a mouse, trackpad, or
+    // touch screen while still leaving part of the next group visible.
     if (count <= visible) return;
     const viewport = viewportRef.current;
     const step = stepSize();
@@ -217,6 +246,8 @@ function Carousel({ items, mode, liked, favorite, check }) {
 }
 
 function App() {
+  // App intentionally keeps the MVP state in one place. This makes the
+  // journey easy to follow: welcome -> onboarding -> discover -> match check.
   const [page, P] = useState("welcome");
   const [taste, T] = useState(read);
   const [q, Q] = useState("");
@@ -235,10 +266,17 @@ function App() {
   const initialFavorites = useRef(read().favorites.length > 0);
   const autoRequested = useRef(false);
   const searchRequestRef = useRef(0);
+  const matchAbortRef = useRef(null);
 
+  // Persist taste changes immediately so refreshes do not erase the user's
+  // selections. The app never sends this browser storage to a third party.
   useEffect(() => localStorage.setItem(STORE, JSON.stringify(taste)), [taste]);
   useEffect(() => {
+    // Discovery collections load once when the app starts. Recommendations
+    // load later, after the user has selected favorites.
     if (initialFavorites.current) P("discover");
+    // This effect synchronizes the initial loading state with the API request.
+    // oxlint-disable-next-line react/set-state-in-effect
     LB(true);
     api("/api/discovery")
       .then((d) => LR(d.rows || []))
@@ -246,6 +284,7 @@ function App() {
       .finally(() => LB(false));
   }, []);
   useEffect(() => {
+    // Returning users with favorites skip onboarding and get fresh picks.
     if (
       page === "discover" &&
       taste.favorites.length &&
@@ -255,8 +294,12 @@ function App() {
       autoRequested.current = true;
       recommend();
     }
+    // recommend is intentionally stable for the lifetime of the app.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [page, taste.favorites.length]);
   useEffect(() => {
+    // This is a small React-managed back button for secondary screens. It is
+    // kept outside the main layout so it does not shift page content.
     if (["welcome", "discover"].includes(page)) return undefined;
     const button = document.createElement("button");
     button.type = "button";
@@ -277,9 +320,13 @@ function App() {
     };
   }, [page, returnPage, taste.favorites.length]);
   useEffect(() => {
+    // Search waits 300ms before calling TMDB. Aborting the previous request
+    // prevents slow responses from replacing newer search results.
     const requestId = ++searchRequestRef.current;
     if (q.trim().length < 2) {
+      // oxlint-disable-next-line react/set-state-in-effect
       R([]);
+      // oxlint-disable-next-line react/set-state-in-effect
       SB(false);
       return;
     }
@@ -316,6 +363,8 @@ function App() {
     }));
   const liked = (x) => taste.favorites.some((f) => key(f) === key(x));
   const feedback = (x, value) =>
+    // Re-clicking the active reaction removes it; otherwise the new reaction
+    // replaces the old one for that title.
     T((t) => {
       const updated = { ...t.feedback };
       if (updated[key(x)]?.value === value) delete updated[key(x)];
@@ -323,6 +372,8 @@ function App() {
       return { ...t, feedback: updated };
     });
   const payload = () => ({
+    // Keep the server payload limited to the signals it understands. Poster
+    // and title fields are still included because they help the UI and prompt.
     favorites: taste.favorites,
     feedback: Object.values(taste.feedback),
     preferences: taste.preferences || {},
@@ -334,6 +385,8 @@ function App() {
     }));
 
   async function recommend() {
+    // Request a new batch, then remember what was shown so later batches can
+    // avoid repeating the same titles in this browser session.
     if (busy) return;
     if (!taste.favorites.length) {
       P("onboard");
@@ -378,6 +431,11 @@ function App() {
   }
 
   async function check(x) {
+    // Only one streaming analysis should be active. Selecting a new title
+    // cancels the previous request so it cannot append text to the wrong card.
+    matchAbortRef.current?.abort();
+    const controller = new AbortController();
+    matchAbortRef.current = controller;
     setReturnPage(page === "check" ? "discover" : page);
     const lockedCategory = x.category || null;
     S(x);
@@ -391,6 +449,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload(), title: x }),
+        signal: controller.signal,
       });
       if (!response.ok) {
         const d = await response.json();
@@ -432,13 +491,18 @@ function App() {
       }
       if (buffer.trim()) consume(buffer);
     } catch (e) {
-      E(e.message);
+      if (e.name !== "AbortError") E(e.message);
     } finally {
+      if (matchAbortRef.current === controller) matchAbortRef.current = null;
       B(false);
     }
   }
 
+  useEffect(() => () => matchAbortRef.current?.abort(), []);
+
   const cards = (items, mode = "favorite") => (
+    // Keeping card creation here ensures every screen gets identical carousel
+    // behavior and accessibility labels.
     <Carousel
       items={items}
       mode={mode}
@@ -448,6 +512,8 @@ function App() {
     />
   );
   const search = (
+    // This shared search control is rendered on both onboarding and match
+    // details, but its results perform different actions through `mode`.
     <label className="search">
       <span aria-hidden="true">⌕</span>
       <input
