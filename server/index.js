@@ -243,15 +243,6 @@ app.get("/api/health", (req, res) =>
     aiEnabled: AI_ENABLED,
   }),
 );
-app.get("/api/test", async (req, res) => {
-  // This diagnostic route verifies that the server can reach TMDB.
-  try {
-    const x = await tmdb("movie/550");
-    res.json({ connected: true, title: x.title, releaseDate: x.release_date });
-  } catch (e) {
-    fail(res, e, "TMDB test");
-  }
-});
 app.get("/api/search", async (req, res) => {
   // Search stays server-side so the browser never needs a TMDB token.
   const q = cleanText(req.query.query || req.query.q, 100).trim();
@@ -282,20 +273,6 @@ app.get("/api/search", async (req, res) => {
     res.json(results.slice(0, 24));
   } catch (e) {
     fail(res, e, "Search");
-  }
-});
-app.get("/api/trending", async (req, res) => {
-  // Trending is a lightweight discovery source and does not call OpenAI.
-  try {
-    const data = await tmdb("trending/all/week", { language: "en-US" });
-    res.json({
-      results: (data.results || [])
-        .filter((x) => ["movie", "tv"].includes(x.media_type) && x.poster_path)
-        .slice(0, 18)
-        .map((x) => movie(x)),
-    });
-  } catch (e) {
-    fail(res, e, "Trending");
   }
 });
 // Each tuple defines one curated row: label, media type, and TMDB filters.
@@ -491,33 +468,6 @@ app.post("/api/match/stream", aiGate, async (req, res) => {
     console.error("[ReelMatch] Match analysis stream:", e.status || "", e.message);
     sse(res, "error", { error: e.status === 503 ? e.message : "Match analysis temporarily unavailable." });
     res.end();
-  }
-});
-// Non-streaming equivalent for clients that prefer a normal JSON response.
-app.post("/api/match", aiGate, async (req, res) => {
-  const taste = validateTaste(req.body);
-  const title = req.body?.title;
-  if (!taste || !validType(title))
-    return res
-      .status(400)
-      .json({ error: "Select a title and at least one favorite." });
-  try {
-    const raw = await tmdb(`${title.type}/${title.id}`);
-    const selected = movie(raw, title.type);
-    const prompt = `You are ReelMatch, a charismatic Gen Z movie friend and influencer who is trying to get the user genuinely excited to watch a title. Sound energetic, personal, persuasive, and natural—like a friend sending a voice note, not an AI or corporate review. Give one qualitative match category and a short 2-3 sentence message that starts with an attention-grabbing hook, connects the title to the user's taste, explains the vibe, uses 0-2 natural emojis when helpful, and ends with a confident call to action like "trust me, press play". Stay spoiler-free and honest. Use only the provided TMDB details and user taste. Never invent plot points.\nTaste: ${JSON.stringify(taste)}\nTitle: ${JSON.stringify(selected)}`;
-    const schema = {
-      type: "object",
-      properties: {
-        category: { type: "string", enum: categories },
-        reason: { type: "string" },
-      },
-      required: ["category", "reason"],
-      additionalProperties: false,
-    };
-    const result = await askAI(prompt, schema, "reelmatch_match");
-    res.json({ ...result, title: selected });
-  } catch (e) {
-    fail(res, e, "Match analysis");
   }
 });
 const distPath = path.resolve(__dirname, "../dist");

@@ -76,7 +76,7 @@ The application is deployed as one Render web service. Express serves the built 
 
 ```text
 ReelMatch/
-├── public/              # Static icons and TMDB attribution assets
+├── public/              # Favicon and TMDB attribution assets
 ├── src/
 │   ├── main.jsx         # React application and user flows
 │   └── styles.css       # Responsive interface styles
@@ -140,11 +140,9 @@ To test AI functionality locally, set `ENABLE_PUBLIC_AI=true`, configure the Ups
 | --- | --- | --- |
 | `GET` | `/api/health` | Reports service and integration status |
 | `GET` | `/api/search` | Searches TMDB movies and TV shows |
-| `GET` | `/api/trending` | Returns trending titles |
 | `GET` | `/api/discovery` | Returns curated genre and popularity rows |
 | `POST` | `/api/recommend` | Generates AI-ranked recommendation rows |
 | `POST` | `/api/match/stream` | Streams a personalized match analysis over SSE |
-| `POST` | `/api/match` | Returns a non-streaming match analysis |
 
 ## Prompt engineering and reliability
 
