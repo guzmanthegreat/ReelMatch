@@ -46,7 +46,11 @@ export default function InfoScreen({ type }) {
     return (
       <InfoLayout
         eyebrow="MOVIE NIGHT NOTES"
-        title={<>Find your next <em>favorite.</em></>}
+        title={
+          <>
+            Find your next <em>favorite.</em>
+          </>
+        }
         intro="Original, practical ideas for choosing movies, building a watchlist, and making recommendation tools work better for you."
       >
         <div className="guide-grid">
@@ -69,14 +73,18 @@ export default function InfoScreen({ type }) {
     return (
       <InfoLayout
         eyebrow="ABOUT REELMATCH"
-        title={<>Movie night, <em>solved.</em></>}
+        title={
+          <>
+            Movie night, <em>solved.</em>
+          </>
+        }
         intro="ReelMatch is a movie-discovery tool for the moment when everyone wants to watch something but nobody knows what."
       >
         <p>
           Instead of asking you to browse an endless catalog, ReelMatch starts
-          with a few titles you already know. Your selections, mood, pacing,
-          and preferred format become a simple taste profile that helps narrow
-          the next choice.
+          with a few titles you already know. Your selections, mood, pacing, and
+          preferred format become a simple taste profile that helps narrow the
+          next choice.
         </p>
         <p>
           ReelMatch is designed to support your decision, not replace it. The
@@ -117,10 +125,10 @@ export default function InfoScreen({ type }) {
         <h2>Cookies and advertising</h2>
         <p>
           If advertising is enabled, advertising partners may use cookies or
-          similar technologies to serve and measure ads. Visitors will be
-          shown the consent options required in applicable regions, and this
-          policy will be updated with the final advertising providers before
-          ads go live.
+          similar technologies to serve and measure ads. Visitors will be shown
+          the consent options required in applicable regions, and this policy
+          will be updated with the final advertising providers before ads go
+          live.
         </p>
         <h2>Contact</h2>
         <p>
@@ -141,10 +149,9 @@ export default function InfoScreen({ type }) {
         <h2>The service</h2>
         <p>
           ReelMatch provides movie and TV discovery suggestions for personal,
-          non-commercial use. Recommendations are generated from the
-          information available to the service and are not guarantees that a
-          title will be available, appropriate for every viewer, or to your
-          liking.
+          non-commercial use. Recommendations are generated from the information
+          available to the service and are not guarantees that a title will be
+          available, appropriate for every viewer, or to your liking.
         </p>
         <h2>Fair use</h2>
         <p>
@@ -166,13 +173,17 @@ export default function InfoScreen({ type }) {
   return (
     <InfoLayout
       eyebrow="CONTACT"
-      title={<>Let&apos;s talk <em>movies.</em></>}
-      intro="Found a bug, have a recommendation, or want to share feedback? We would love to hear from you."
+      title={
+        <>
+          Let&apos;s talk <em>movies.</em>
+        </>
+      }
+      intro="Found a bug, have a recommendation, or want to share feedback? I'd would love to hear from you."
     >
       <p>
-        Email us at <a href="mailto:hello@reelmatch.app">hello@reelmatch.app</a>
-        . Please include the page you were using and a short description of
-        what happened if you are reporting a problem.
+        Email me at <a href="mailto:joshguzman@cpp.edu">joshguzman@cpp.edu</a>.
+        Please include the page you were using and a short description of what
+        happened if you are reporting a problem.
       </p>
     </InfoLayout>
   );
