@@ -12,6 +12,26 @@ to watch based on the movies and shows they already enjoy. It combines a
 React interface, an Express API, TMDB's catalog, and OpenAI-powered
 recommendations and match explanations.
 
+## Screenshots
+
+<p align="center">
+  <a href="docs/screenshots/pick-movies-you-love.png">
+    <img src="docs/screenshots/pick-movies-you-love.png" alt="Pick movies you love onboarding screen" />
+  </a>
+  <p align="center"><strong>Onboarding Screen
+  </strong></p>
+  <a href="docs/screenshots/your-next-favorite.png">
+    <img src="docs/screenshots/your-next-favorite.png" alt="Personalized recommendations screen"/>
+  </a>
+    <p align="center"><strong>Personalized recommendations screen</strong></p>
+
+  <a href="docs/screenshots/find-a-movie.png">
+    <img src="docs/screenshots/find-a-movie.png" alt="Personalized movie match analysis screen"/>
+  </a>
+    <p align="center"><strong>Personalized movie match analysis screen</strong></p>
+
+</p>
+
 ## The experience
 
 1. Pick favorite movies or TV shows and optionally set mood, pacing, and format
@@ -59,14 +79,14 @@ separate frontend host or database.
 
 ## Technology
 
-| Area | Tools |
-| --- | --- |
-| Frontend | React 19, Vite, CSS |
-| Backend | Node.js, Express 5 |
-| Movie and TV catalog | TMDB API |
-| AI | OpenAI Responses API |
-| Streaming | Server-Sent Events |
-| Deployment | Render |
+| Area                 | Tools                |
+| -------------------- | -------------------- |
+| Frontend             | React 19, Vite, CSS  |
+| Backend              | Node.js, Express 5   |
+| Movie and TV catalog | TMDB API             |
+| AI                   | OpenAI Responses API |
+| Streaming            | Server-Sent Events   |
+| Deployment           | Render               |
 
 ## Run locally
 
@@ -114,28 +134,28 @@ Express. Use the build-and-start commands above to run the complete app locally.
 
 ### Environment settings
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `TMDB_READ_ACCESS_TOKEN` | TMDB API credential | Not set |
-| `OPENAI_API_KEY` | Enables server-side OpenAI requests | Not set |
-| `OPENAI_MODEL` | OpenAI model name | `gpt-4o-mini` |
-| `ENABLE_PUBLIC_AI` | Enables AI routes | `false` |
-| `AI_PER_IP_LIMIT` | AI requests allowed per IP per hour | `20` |
-| `AI_GLOBAL_LIMIT` | AI requests allowed across this server per hour | `500` |
-| `PORT` | Express listening port | `3001` |
+| Variable                 | Purpose                                         | Default       |
+| ------------------------ | ----------------------------------------------- | ------------- |
+| `TMDB_READ_ACCESS_TOKEN` | TMDB API credential                             | Not set       |
+| `OPENAI_API_KEY`         | Enables server-side OpenAI requests             | Not set       |
+| `OPENAI_MODEL`           | OpenAI model name                               | `gpt-4o-mini` |
+| `ENABLE_PUBLIC_AI`       | Enables AI routes                               | `false`       |
+| `AI_PER_IP_LIMIT`        | AI requests allowed per IP per hour             | `20`          |
+| `AI_GLOBAL_LIMIT`        | AI requests allowed across this server per hour | `500`         |
+| `PORT`                   | Express listening port                          | `3001`        |
 
 The request limits are in-memory safeguards, not a spending cap. OpenAI usage
 can incur charges; set a budget or alert in the OpenAI project as well.
 
 ## API
 
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/health` | Reports server and integration status |
-| `GET` | `/api/search` | Searches TMDB for movies and TV shows |
-| `GET` | `/api/discovery` | Loads popular and genre-based collections |
-| `POST` | `/api/recommend` | Returns AI-ranked TMDB candidates |
-| `POST` | `/api/match/stream` | Streams a personalized match explanation |
+| Method | Route               | Purpose                                   |
+| ------ | ------------------- | ----------------------------------------- |
+| `GET`  | `/api/health`       | Reports server and integration status     |
+| `GET`  | `/api/search`       | Searches TMDB for movies and TV shows     |
+| `GET`  | `/api/discovery`    | Loads popular and genre-based collections |
+| `POST` | `/api/recommend`    | Returns AI-ranked TMDB candidates         |
+| `POST` | `/api/match/stream` | Streams a personalized match explanation  |
 
 ## Quality checks
 
@@ -190,6 +210,7 @@ ReelMatch/
 │   ├── rateLimit.js      # In-memory AI request limits
 │   └── index.test.js     # Backend validation tests
 ├── .env.example           # Local environment variable template
+├── docs/screenshots/      # README product screenshots
 ├── index.html             # HTML page Vite loads
 ├── render.yaml            # Render service configuration
 ├── vite.config.js
