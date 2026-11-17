@@ -179,6 +179,14 @@ production site is available at [reelmatch.org](https://reelmatch.org/). Add
 The blueprint enables AI for the public demo, so keep its request limits and
 OpenAI budget in mind.
 
+## Monetization
+
+The production site is connected to Google AdSense at
+[reelmatch.org](https://reelmatch.org/). The AdSense publisher script is loaded
+from `index.html`; ads will not serve until Google approves the site. Keep the
+privacy policy and consent settings up to date before enabling personalized
+advertising.
+
 ## Scope and trade-offs
 
 ReelMatch is scoped as a guest-first discovery MVP. Its boundaries are
