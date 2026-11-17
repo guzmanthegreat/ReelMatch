@@ -1,11 +1,16 @@
 # ReelMatch
 
-### Personalized movie and TV discovery
+### AI Personalized Movie and TV discovery
 
 **Less scrolling. More watching.**
 
-[Try the live demo](https://reelmatch-01g2.onrender.com/) ·
-[View the source](https://github.com/guzmanthegreat/ReelMatch)
+<h2 align="center">
+  <a href="https://reelmatch-01g2.onrender.com/">Open the live ReelMatch demo →</a>
+</h2>
+<p align="center">Try the guest experience. (no account required)</p>
+<p align="center">
+  <a href="https://github.com/guzmanthegreat/ReelMatch">View the source code on GitHub</a>
+</p>
 
 ReelMatch is a full-stack portfolio project that helps people find something
 to watch based on the movies and shows they already enjoy. It combines a
@@ -15,20 +20,15 @@ recommendations and match explanations.
 ## Screenshots
 
 <p align="center">
+  <p align="center"><strong>Onboarding
+  </strong></p>
   <a href="docs/screenshots/pick-movies-you-love.png">
     <img src="docs/screenshots/pick-movies-you-love.png" alt="Pick movies you love onboarding screen" />
   </a>
-  <p align="center"><strong>Onboarding Screen
-  </strong></p>
-  <a href="docs/screenshots/your-next-favorite.png">
-    <img src="docs/screenshots/your-next-favorite.png" alt="Personalized recommendations screen"/>
-  </a>
-    <p align="center"><strong>Personalized recommendations screen</strong></p>
-
+  <p align="center"><strong>Personalized Movie Match Analysis</strong></p>
   <a href="docs/screenshots/find-a-movie.png">
     <img src="docs/screenshots/find-a-movie.png" alt="Personalized movie match analysis screen"/>
   </a>
-    <p align="center"><strong>Personalized movie match analysis screen</strong></p>
 
 </p>
 
@@ -178,16 +178,20 @@ starts the Express server, and uses `/api/health` as its health check. Add
 The blueprint enables AI for the public demo, so keep its request limits and
 OpenAI budget in mind.
 
-## Current scope and next steps
+## Scope and trade-offs
 
-- Guest data is stored in the browser; there are no accounts or cross-device
-  profiles.
-- AI request limits reset when the server restarts. A shared, durable limiter
-  would be needed to scale the public service.
-- The project has backend unit tests, but no browser end-to-end or external API
-  integration suite yet.
-- Caching TMDB responses and measuring recommendation quality are future
-  improvements.
+ReelMatch is scoped as a guest-first discovery MVP. Its boundaries are
+intentional:
+
+- Guest data stays in browser storage for the current browser session; there
+  are no accounts or cross-device profiles.
+- AI limits are kept in memory for the small demo and reset when the server
+  restarts. A shared limiter is only needed if the service grows.
+- Automated tests focus on backend input validation and text normalization.
+  Browser end-to-end and live external-service tests are not part of the
+  current test setup.
+- Caching TMDB responses and measuring recommendation quality are possible
+  future enhancements, not prerequisites for this project scope.
 
 ## Project structure
 
