@@ -92,8 +92,66 @@ nav button:hover {
   background: #281a35;
   color: #f3e6ff;
 }
+nav button:last-child {
+  color: #cdb5d9;
+}
 main {
   flex: 1;
+}
+.info-page {
+  max-width: 980px;
+}
+.info-intro {
+  max-width: 720px;
+  font-size: 19px !important;
+  line-height: 1.6;
+  color: #d9cddd !important;
+}
+.info-content {
+  max-width: 760px;
+  margin-top: 48px;
+}
+.info-content p,
+.info-content li {
+  color: #c7bbcD;
+  font-size: 16px;
+  line-height: 1.8;
+}
+.info-content h2 {
+  margin: 38px 0 10px;
+  font: 800 25px Manrope, sans-serif;
+  letter-spacing: -0.04em;
+  color: #f7f4fa;
+}
+.info-content a {
+  color: #d09aff;
+}
+.info-content ol {
+  padding-left: 24px;
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  max-width: none;
+}
+.guide-card {
+  padding: 25px;
+  border: 1px solid #493754;
+  border-radius: 16px;
+  background: #19131f;
+}
+.guide-card .eyebrow {
+  margin: 0 0 16px;
+  font-size: 10px;
+}
+.guide-card h2 {
+  margin: 0 0 14px;
+  font-size: 23px;
+}
+.guide-card p {
+  font-size: 14px;
+  line-height: 1.7;
 }
 .hero {
   /* The welcome screen is intentionally spacious and centered around one action. */
@@ -621,6 +679,22 @@ footer {
   border-top: 1px solid #ffffff12;
   color: #a79aad;
 }
+.footer-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.footer-links button {
+  border: 0;
+  background: transparent;
+  color: #b7a8bd;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.footer-links button:hover {
+  color: #e4c9f4;
+}
 footer strong {
   font:
     800 21px Manrope,
@@ -651,6 +725,12 @@ footer p {
   }
 }
 @media (max-width: 700px) {
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .info-page {
+    padding-top: 52px;
+  }
   /* Phone layout stacks controls and gives cards enough touch target space. */
   .header {
     height: 66px;

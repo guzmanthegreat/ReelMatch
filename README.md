@@ -5,7 +5,7 @@
 **Less scrolling. More watching.**
 
 <h2 align="center">
-  <a href="https://reelmatch-01g2.onrender.com/">Open the live ReelMatch demo →</a>
+  <a href="https://reelmatch.org/">Open the live ReelMatch demo →</a>
 </h2>
 <p align="center">Try the guest experience. (no account required)</p>
 <p align="center">
@@ -73,9 +73,9 @@ Browser: React + Vite
         +-------------> SSE stream to browser
 ```
 
-The app deploys as one Render web service. Express serves the built Vite
-frontend and API from the same origin, so the current project does not need a
-separate frontend host or database.
+The app deploys as one Render web service at [reelmatch.org](https://reelmatch.org/).
+Express serves the built Vite frontend and API from the same origin, so the
+current project does not need a separate frontend host or database.
 
 ## Technology
 
@@ -173,7 +173,8 @@ normalization.
 ## Deploy
 
 The Render blueprint in [`render.yaml`](render.yaml) builds the frontend,
-starts the Express server, and uses `/api/health` as its health check. Add
+starts the Express server, and uses `/api/health` as its health check. The
+production site is available at [reelmatch.org](https://reelmatch.org/). Add
 `TMDB_READ_ACCESS_TOKEN` and `OPENAI_API_KEY` in Render's environment settings.
 The blueprint enables AI for the public demo, so keep its request limits and
 OpenAI budget in mind.

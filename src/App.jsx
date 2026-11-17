@@ -106,6 +106,7 @@ import OnboardingScreen from "./screens/OnboardingScreen";
 import DiscoverScreen from "./screens/DiscoverScreen";
 import MatchScreen from "./screens/MatchScreen";
 import TasteScreen from "./screens/TasteScreen";
+import InfoScreen from "./screens/InfoScreen";
 
 export default function App() {
   // Shared app state connects the screens and tracks the user's progress.
@@ -183,7 +184,11 @@ export default function App() {
   }, [page, taste.favorites.length]);
   useEffect(() => {
     // Adds a back button to secondary screens without shifting the page layout.
-    if (page === "welcome" || page === "discover") {
+    if (
+      page === "welcome" ||
+      page === "discover" ||
+      ["about", "guides", "privacy", "terms", "contact"].includes(page)
+    ) {
       return undefined;
     }
     const button = document.createElement("button");
@@ -708,6 +713,12 @@ export default function App() {
     tasteButtonClass = "current";
   }
 
+  const openInfoPage = (nextPage) => {
+    setPage(nextPage);
+    setErrorMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -744,6 +755,12 @@ export default function App() {
             }}
           >
             My Taste
+          </button>
+          <button
+            className={page === "guides" ? "current" : ""}
+            onClick={() => openInfoPage("guides")}
+          >
+            Guides
           </button>
         </nav>
       </header>
@@ -820,6 +837,9 @@ export default function App() {
             toggleFeedback={toggleFeedback}
           />
         )}
+        {["about", "guides", "privacy", "terms", "contact"].includes(page) && (
+          <InfoScreen type={page} />
+        )}
       </main>
       <footer>
         <div>
@@ -827,6 +847,13 @@ export default function App() {
             reel<span>match.</span>
           </strong>
           <p>Made for the indecisive movie lover.</p>
+        </div>
+        <div className="footer-links" aria-label="Footer navigation">
+          <button onClick={() => openInfoPage("about")}>About</button>
+          <button onClick={() => openInfoPage("guides")}>Guides</button>
+          <button onClick={() => openInfoPage("privacy")}>Privacy</button>
+          <button onClick={() => openInfoPage("terms")}>Terms</button>
+          <button onClick={() => openInfoPage("contact")}>Contact</button>
         </div>
         <div className="attribution">
           <img src="/tmdb-logo.svg" alt="TMDB logo" />
