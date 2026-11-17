@@ -1154,10 +1154,6 @@ footer p {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Let only the carousel break out of the reading column and reach both viewport edges. */
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  padding: 0 12px;
 }
 .poster-viewport {
   flex: 1;
