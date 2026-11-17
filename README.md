@@ -5,9 +5,9 @@
 **Less scrolling. More watching.**
 
 <h2 align="center">
-  <a href="https://reelmatch.org/">Open the live ReelMatch demo →</a>
+  <a href="https://reelmatch.org/">reelmatch.org →</a>
 </h2>
-<p align="center">Try the guest experience. (no account required)</p>
+
 <p align="center">
   <a href="https://github.com/guzmanthegreat/ReelMatch">View the source code on GitHub</a>
 </p>
@@ -17,19 +17,14 @@ to watch based on the movies and shows they already enjoy. It combines a
 React interface, an Express API, TMDB's catalog, and OpenAI-powered
 recommendations and match explanations.
 
-## Screenshots
+## Demo
 
 <p align="center">
-  <p align="center"><strong>Onboarding
-  </strong></p>
-  <a href="docs/screenshots/pick-movies-you-love.png">
-    <img src="docs/screenshots/pick-movies-you-love.png" alt="Pick movies you love onboarding screen" />
-  </a>
-  <p align="center"><strong>Personalized Movie Match Analysis</strong></p>
-  <a href="docs/screenshots/find-a-movie.png">
-    <img src="docs/screenshots/find-a-movie.png" alt="Personalized movie match analysis screen"/>
-  </a>
-
+  <img
+    src="docs/demo.gif"
+    alt="ReelMatch product demo"
+    width="900"
+  />
 </p>
 
 ## The experience
