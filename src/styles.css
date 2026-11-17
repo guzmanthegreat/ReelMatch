@@ -113,13 +113,15 @@ main {
 }
 .info-content p,
 .info-content li {
-  color: #c7bbcD;
+  color: #c7bbcd;
   font-size: 16px;
   line-height: 1.8;
 }
 .info-content h2 {
   margin: 38px 0 10px;
-  font: 800 25px Manrope, sans-serif;
+  font:
+    800 25px Manrope,
+    sans-serif;
   letter-spacing: -0.04em;
   color: #f7f4fa;
 }
@@ -210,7 +212,7 @@ main {
 .hero-content {
   padding: 70px 20px;
 }
-.hero-kicker,
+
 .step-label {
   color: #c58af9;
   font-size: 11px;

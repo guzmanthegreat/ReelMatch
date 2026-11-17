@@ -731,7 +731,7 @@ export default function App() {
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         >
-          reel<span>match.</span>
+          reel<span>match</span>
         </button>
         <nav aria-label="Main navigation">
           <button
@@ -767,10 +767,7 @@ export default function App() {
       <main>
         {/* Show only the screen selected by page. Buttons call setPage to switch it. */}
         {page === "welcome" && (
-          <WelcomeScreen
-            setPage={setPage}
-            setErrorMessage={setErrorMessage}
-          />
+          <WelcomeScreen setPage={setPage} setErrorMessage={setErrorMessage} />
         )}
         {page === "onboarding" && (
           <OnboardingScreen
@@ -844,7 +841,7 @@ export default function App() {
       <footer>
         <div>
           <strong>
-            reel<span>match.</span>
+            reel<span>match</span>
           </strong>
           <p>Made for the indecisive movie lover.</p>
         </div>

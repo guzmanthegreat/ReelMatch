@@ -8,7 +8,6 @@ export default function WelcomeScreen(props) {
   return (
     <section className="hero">
       <div className="hero-content">
-        <div className="hero-kicker">REELMATCH</div>
         <h1>
           Movie night,
           <br />
@@ -28,4 +27,3 @@ export default function WelcomeScreen(props) {
     </section>
   );
 }
-
