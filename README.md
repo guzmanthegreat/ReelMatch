@@ -4,15 +4,15 @@
 
 **Less scrolling. More watching.**
 
-<h2 align="center">
-  <a href="https://reelmatch.org/">reelmatch.org →</a>
+<h2 align="center">Live Site:
+  <a href="https://reelmatch.org/">reelmatch.org</a>
 </h2>
 
 <p align="center">
   <a href="https://github.com/guzmanthegreat/ReelMatch">View the source code on GitHub</a>
 </p>
 
-ReelMatch is a full-stack portfolio project that helps people find something
+ReelMatch is a full-stack project that helps people find something
 to watch based on the movies and shows they already enjoy. It combines a
 React interface, an Express API, TMDB's catalog, and OpenAI-powered
 recommendations and match explanations.
@@ -27,7 +27,7 @@ recommendations and match explanations.
   />
 </p>
 
-## The experience
+## The Experience
 
 1. Pick favorite movies or TV shows and optionally set mood, pacing, and format
    preferences.
