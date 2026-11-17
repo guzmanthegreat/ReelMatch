@@ -14,18 +14,10 @@ services:
       - key: ENABLE_PUBLIC_AI
         # The demo enables AI so the matching flow works after deployment.
         value: "true"
-      - key: ALLOW_IN_MEMORY_AI_LIMITS
-        # This beginner setup works without Redis. Redis is safer for larger
-        # public traffic because its limits survive server restarts.
-        value: "true"
       - key: AI_PER_IP_LIMIT
         value: "20"
       - key: AI_GLOBAL_LIMIT
         value: "500"
-      - key: UPSTASH_REDIS_REST_URL
-        sync: false
-      - key: UPSTASH_REDIS_REST_TOKEN
-        sync: false
       - key: TMDB_READ_ACCESS_TOKEN
         sync: false
       - key: OPENAI_API_KEY

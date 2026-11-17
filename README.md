@@ -6,7 +6,11 @@ ReelMatch is a full-stack movie and TV discovery application that turns a user's
 
 **[Live demo](https://reelmatch-01g2.onrender.com/)** · **[Repository](https://github.com/guzmanthegreat/ReelMatch)**
 
-> **Status:** Public beta. The core guest experience is deployed on Render. Operational hardening, automated testing, and persistent user accounts are planned improvements.
+ReelMatch is a portfolio project focused on practical full-stack development:
+API integration, user-centered state, streaming responses, and careful AI
+validation around a simple movie-discovery experience.
+
+> **Status:** Public beta. The core guest experience is deployed on Render. Automated unit checks and continuous integration are included; persistent user accounts remain a future improvement.
 
 ## What the project demonstrates
 
@@ -78,7 +82,10 @@ The application is deployed as one Render web service. Express serves the built 
 ReelMatch/
 ├── public/              # Favicon and TMDB attribution assets
 ├── src/
-│   ├── main.jsx         # React application and user flows
+│   ├── main.jsx         # Small React entry point
+│   ├── App.jsx          # App state and screen flow
+│   ├── utils.js         # Shared frontend identity and CSS helpers
+│   ├── components/      # Reusable poster and carousel components
 │   └── styles.css       # Responsive interface styles
 ├── server/
 │   └── index.js         # Express API, TMDB integration, and AI routes
@@ -105,18 +112,10 @@ cd ReelMatch
 npm ci --include=dev
 ```
 
-Create a `.env` file in the project root. Never commit this file:
+Copy `.env.example` to `.env` in the project root. Never commit the real `.env` file:
 
-```dotenv
-TMDB_READ_ACCESS_TOKEN=replace_with_your_tmdb_read_access_token
-OPENAI_API_KEY=replace_with_your_openai_api_key
-OPENAI_MODEL=replace_with_a_supported_model
-ENABLE_PUBLIC_AI=false
-AI_PER_IP_LIMIT=20
-AI_GLOBAL_LIMIT=500
-UPSTASH_REDIS_REST_URL=replace_with_your_upstash_rest_url
-UPSTASH_REDIS_REST_TOKEN=replace_with_your_upstash_rest_token
-PORT=3001
+```bash
+cp .env.example .env
 ```
 
 `TMDB_TOKEN` is also accepted as an alternative to `TMDB_READ_ACCESS_TOKEN`.
@@ -130,7 +129,7 @@ node server/index.js
 
 Then open [http://localhost:3001](http://localhost:3001). The health endpoint is available at [http://localhost:3001/api/health](http://localhost:3001/api/health).
 
-To test AI functionality locally, set `ENABLE_PUBLIC_AI=true` and restart the server. This enables paid API requests, so it should only be used in a controlled development environment. The beginner deployment uses the in-memory limiter; add the Upstash Redis credentials later if the app gets real traffic.
+To test AI functionality locally, set `ENABLE_PUBLIC_AI=true` and restart the server. This enables paid API requests, so it should only be used in a controlled development environment.
 
 > `npm run dev` starts Vite's frontend development server only. Since the current Vite configuration does not proxy `/api` requests, use the build-and-start commands above for a complete local test of the deployed architecture.
 
@@ -144,6 +143,16 @@ To test AI functionality locally, set `ENABLE_PUBLIC_AI=true` and restart the se
 | `POST` | `/api/recommend` | Generates AI-ranked recommendation rows |
 | `POST` | `/api/match/stream` | Streams a personalized match analysis over SSE |
 
+## Quality checks
+
+Run the same checks used by GitHub Actions before opening a pull request:
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
 ## Prompt engineering and reliability
 
 ReelMatch uses several controls around the OpenAI integration:
@@ -153,7 +162,7 @@ ReelMatch uses several controls around the OpenAI integration:
 - Candidate IDs are included in the prompt and validated against the server's candidate map after the response.
 - Favorites and feedback are separated into positive, neutral, and negative signals.
 - Match analysis uses the selected title's current TMDB details rather than relying on user-provided text.
-- AI requests are gated behind an environment flag and limited by IP and process-wide counters. Redis can make those limits durable later.
+- AI requests are gated behind an environment flag and limited by IP and process-wide counters.
 
 The recommendation endpoint asks the model to rank verified candidates only. The model does not directly call TMDB and cannot add arbitrary titles to the result set.
 
@@ -172,7 +181,7 @@ Set `TMDB_READ_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_MODEL`, and `ENABLE_PUBL
 ## Current limitations
 
 - User profiles are browser-based; there is no account system or server-side synchronization.
-- The checked-in Render blueprint enables AI with a simple in-memory request limiter so the demo works without Redis. This limiter resets when the server restarts and should be replaced with Redis before a larger public launch.
+- The checked-in Render blueprint enables AI with a simple in-memory request limiter so the demo works without an extra database. This limiter resets when the server restarts and should be replaced with a durable limiter before a larger public launch.
 - Request limits do not guarantee a dollar limit. Set an OpenAI project budget/alert as the final cost safeguard.
 - Recommendation and TMDB responses are not yet backed by a persistent cache.
 - Automated integration and end-to-end test coverage should be expanded before large-scale public use.
@@ -181,7 +190,6 @@ Set `TMDB_READ_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_MODEL`, and `ENABLE_PUBL
 ## Roadmap
 
 - Add optional accounts and server-side profiles
-- Add durable rate limits, caching, and observability
 - Expand automated API and browser testing
 - Measure recommendation quality using user feedback
 - Continue improving accessibility, performance, and recommendation diversity
@@ -192,4 +200,5 @@ This product uses the TMDB API but is not endorsed or certified by TMDB. Movie a
 
 ## License
 
-No open-source license has been selected for this repository yet. Until a license is added, the source code remains fully protected by copyright and should not be reused as if it were open source.
+This project is available under the [MIT License](LICENSE). TMDB data, images,
+and branding remain subject to TMDB's own terms and attribution requirements.
