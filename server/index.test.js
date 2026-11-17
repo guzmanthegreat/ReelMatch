@@ -22,9 +22,15 @@ test("validateTaste accepts bounded, valid taste data", () => {
 test("validateTaste rejects malformed and oversized favorites", () => {
   assert.equal(server.validateTaste({}), null);
   assert.equal(server.validateTaste({ favorites: [{ id: -1, type: "movie" }] }), null);
+
+  const manyFavorites = [];
+  for (let id = 1; id <= 31; id += 1) {
+    manyFavorites.push({ id, type: "movie" });
+  }
+
   assert.equal(
     server.validateTaste({
-      favorites: Array.from({ length: 31 }, (_, id) => ({ id: id + 1, type: "movie" })),
+      favorites: manyFavorites,
     }),
     null,
   );

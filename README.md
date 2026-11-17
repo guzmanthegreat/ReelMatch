@@ -86,9 +86,16 @@ ReelMatch/
 │   ├── App.jsx          # App state and screen flow
 │   ├── utils.js         # Shared frontend identity and CSS helpers
 │   ├── components/      # Reusable poster and carousel components
+│   ├── screens/         # Welcome, onboarding, discovery, match, and taste screens
 │   └── styles.css       # Responsive interface styles
 ├── server/
-│   └── index.js         # Express API, TMDB integration, and AI routes
+│   ├── index.js         # Express app and API route definitions
+│   ├── config.js        # Environment variables and service clients
+│   ├── validation.js    # Request validation and TMDB data formatting
+│   ├── tmdb.js          # TMDB API requests
+│   ├── ai.js            # OpenAI prompts and SSE helpers
+│   ├── rateLimit.js     # Simple in-memory AI request limits
+│   └── index.test.js    # Backend validation tests
 ├── index.html
 ├── render.yaml          # Render deployment configuration
 ├── vite.config.js

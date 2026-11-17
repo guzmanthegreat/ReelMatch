@@ -1,11 +1,30 @@
-// Shared title helpers keep identity and category class names consistent.
-export const key = (item) => `${item.type}:${item.id}`;
+// Builds a unique ID so movies and TV shows with the same TMDB ID stay separate.
+export function key(item) {
+  return `${item.type}:${item.id}`;
+}
 
-export const titleKey = (item) =>
-  (item.title || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+// Makes title names comparable when checking for duplicates.
+export function titleKey(item) {
+  let title = item.title;
+  if (!title) {
+    title = "";
+  }
 
+  title = title.trim();
+  title = title.toLocaleLowerCase();
+  title = title.replace(/\s+/g, " ");
+  return title;
+}
+
+// Builds the CSS class used to color a match category.
 export function categoryClass(category) {
-  // CSS uses lowercase kebab-case names for match category colors.
-  return `category-${(category || "").toLowerCase().replaceAll(" ", "-")}`;
+  let categoryName = category;
+  if (!categoryName) {
+    categoryName = "";
+  }
+
+  categoryName = categoryName.toLowerCase();
+  categoryName = categoryName.replace(/ /g, "-");
+  return `category-${categoryName}`;
 }
 

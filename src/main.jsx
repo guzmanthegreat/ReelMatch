@@ -1,7 +1,11 @@
-// This is the browser entry point. Keeping it tiny makes it easy to see
-// where React starts without mixing setup code with application features.
+// Connects the React app to the webpage.
 import { createRoot } from "react-dom/client";
+// Loads the main component that contains the app screens.
 import App from "./App";
+// Loads styles shared by all screens.
 import "./styles.css";
 
-createRoot(document.getElementById("root")).render(<App />);
+// Render App inside the root element from index.html.
+const rootElement = document.getElementById("root");
+const appRoot = createRoot(rootElement);
+appRoot.render(<App />);

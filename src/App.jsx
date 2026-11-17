@@ -1,15 +1,12 @@
 /* oxlint-disable react/only-export-components */
 import React, { useEffect, useRef, useState } from "react";
 
-// These keys identify the browser storage entries used by ReelMatch.
-// Favorites and reactions survive a refresh; the session key prevents old
-// local data from unexpectedly appearing in a brand-new browser session.
-const STORE = "reelmatch-ready-taste";
-const SESSION = "reelmatch-journey-started";
+// These keys identify the user's saved taste and current browser session.
+const TASTE_STORAGE_KEY = "reelmatch:taste";
+const SESSION_STARTED_KEY = "reelmatch:session-started";
 
-// These questions shape the AI prompt. They are optional: favorites are the
-// required signal, while preferences help narrow the recommendation style.
-const QUESTIONS = [
+// These optional answers help personalize recommendations.
+const PREFERENCE_QUESTIONS = [
   {
     id: "mood",
     title: "What are you in the mood for?",
@@ -33,334 +30,683 @@ const QUESTIONS = [
   },
 ];
 
-function freshTaste() {
-  // Keeping one predictable object shape makes storage and React updates
-  // simpler because every user starts with the same fields.
+// Creates the starting taste data before the user picks any titles.
+function createEmptyTaste() {
   return { favorites: [], feedback: {}, history: [], preferences: {} };
 }
-function read() {
-  // localStorage can be unavailable or contain invalid JSON, especially when
-  // a user has cleared data or browser privacy settings block storage.
+// Loads saved taste from browser storage, or starts fresh if it is unavailable.
+function loadTaste() {
   try {
-    if (!sessionStorage.getItem(SESSION)) {
-      sessionStorage.setItem(SESSION, "1");
-      localStorage.removeItem(STORE);
+    if (!sessionStorage.getItem(SESSION_STARTED_KEY)) {
+      // Start this browser session without the taste saved by an earlier one.
+      sessionStorage.setItem(SESSION_STARTED_KEY, "1");
+      localStorage.removeItem(TASTE_STORAGE_KEY);
     }
-    return JSON.parse(localStorage.getItem(STORE)) || freshTaste();
+    const savedTasteText = localStorage.getItem(TASTE_STORAGE_KEY);
+    if (!savedTasteText) {
+      return createEmptyTaste();
+    }
+
+    // Saved taste is JSON text, so parse it back into JavaScript data.
+    const savedTaste = JSON.parse(savedTasteText);
+    if (savedTaste) {
+      return savedTaste;
+    }
+
+    return createEmptyTaste();
   } catch {
-    return freshTaste();
+    // Browser settings can block storage, so use an empty taste if it fails.
+    return createEmptyTaste();
   }
 }
-async function api(url, options) {
-  // All JSON API calls go through one helper so errors are shown consistently
-  // instead of each screen having to repeat response parsing logic.
-  const r = await fetch(url, options);
-  const raw = await r.text();
-  let d = {};
+// Sends a request and returns its JSON response.
+async function requestJson(url, options) {
+  const response = await fetch(url, options);
+  const responseText = await response.text();
+  let responseData = {};
   try {
-    d = raw ? JSON.parse(raw) : {};
+    // Convert the response text to JavaScript data; an empty response becomes an empty object.
+    if (responseText) {
+      responseData = JSON.parse(responseText);
+    } else {
+      responseData = {};
+    }
   } catch {
-    d = {};
+    // Keep an empty object if the response is not valid JSON.
+    responseData = {};
   }
-  if (!r.ok) throw Error(d.error || `Request failed (${r.status})`);
-  return d;
+  // Throwing here sends the error to the calling function's catch block.
+  if (!response.ok) {
+    if (responseData && responseData.error) {
+      throw Error(responseData.error);
+    }
+    throw Error(`Request failed (${response.status})`);
+  }
+  return responseData;
 }
-const post = (url, data) =>
-  api(url, {
+// Sends JSON data to a server route.
+function postJson(url, requestData) {
+  const options = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-import { key, titleKey, categoryClass } from "./utils";
+    // The server expects the request data as JSON text.
+    body: JSON.stringify(requestData),
+  };
+  return requestJson(url, options);
+}
+
+import {
+  key as getTitleId,
+  titleKey as normalizeTitleName,
+  categoryClass,
+} from "./utils";
 import { Carousel } from "./components/Carousel";
-import { Poster } from "./components/Poster";
+import WelcomeScreen from "./screens/WelcomeScreen";
+import OnboardingScreen from "./screens/OnboardingScreen";
+import DiscoverScreen from "./screens/DiscoverScreen";
+import MatchScreen from "./screens/MatchScreen";
+import TasteScreen from "./screens/TasteScreen";
 
 export default function App() {
-  // App intentionally keeps the MVP state in one place. This makes the
-  // journey easy to follow: welcome -> onboarding -> discover -> match check.
-  const [page, P] = useState("welcome");
-  const [taste, T] = useState(read);
-  const [q, Q] = useState("");
-  const [results, R] = useState([]);
-  const [libraryRows, LR] = useState([]);
-  const [recommendationRows, RR] = useState([]);
-  const [selected, S] = useState(null);
-  const [match, M] = useState(null);
-  const [busy, B] = useState(false);
-  const [searchBusy, SB] = useState(false);
-  const [libraryBusy, LB] = useState(false);
-  const [error, E] = useState("");
-  const [pageNum, N] = useState(1);
-  const [showHistory, SH] = useState(false);
-  const [returnPage, setReturnPage] = useState("discover");
-  const initialFavorites = useRef(read().favorites.length > 0);
-  const autoRequested = useRef(false);
-  const searchRequestRef = useRef(0);
-  const matchAbortRef = useRef(null);
+  // Shared app state connects the screens and tracks the user's progress.
+  // Each useState call gives us a value and a function that updates that value.
+  const [page, setPage] = useState("welcome");
+  const [taste, setTaste] = useState(loadTaste);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [libraryRows, setLibraryRows] = useState([]);
+  const [recommendationRows, setRecommendationRows] = useState([]);
+  const [selectedTitle, setSelectedTitle] = useState(null);
+  const [matchAnalysis, setMatchAnalysis] = useState(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [isSearchBusy, setIsSearchBusy] = useState(false);
+  const [isLibraryBusy, setIsLibraryBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [recommendationPage, setRecommendationPage] = useState(1);
+  const [showHistory, setShowHistory] = useState(false);
+  const [pageToReturnTo, setPageToReturnTo] = useState("discover");
+  // These refs keep values between renders without causing another render.
+  const hasSavedFavorites = useRef(loadTaste().favorites.length > 0);
+  const hasAutoRequestedRecommendations = useRef(false);
+  const searchRequestIdRef = useRef(0);
+  const matchRequestControllerRef = useRef(null);
+  // Allows recommendations to be requested again after favorites change.
+  const resetAutomaticRecommendationRequest = () => {
+    hasAutoRequestedRecommendations.current = false;
+  };
 
-  // Persist taste changes immediately so refreshes do not erase the user's
-  // selections. The app never sends this browser storage to a third party.
-  useEffect(() => localStorage.setItem(STORE, JSON.stringify(taste)), [taste]);
+  // Saves taste changes in browser storage after each update.
+  // Web storage accepts text, so convert the taste object to JSON first.
+  useEffect(
+    () => localStorage.setItem(TASTE_STORAGE_KEY, JSON.stringify(taste)),
+    [taste],
+  );
   useEffect(() => {
-    // Discovery collections load once when the app starts. Recommendations
-    // load later, after the user has selected favorites.
-    if (initialFavorites.current) P("discover");
-    // This effect synchronizes the initial loading state with the API request.
+    // Loads general discovery collections when the app starts.
+    if (hasSavedFavorites.current) setPage("discover");
+    // Shows a loading state while the discovery request runs.
     // oxlint-disable-next-line react/set-state-in-effect
-    LB(true);
-    api("/api/discovery")
-      .then((d) => LR(d.rows || []))
-      .catch((e) => E(e.message))
-      .finally(() => LB(false));
+    setIsLibraryBusy(true);
+
+    async function loadDiscoveryRows() {
+      try {
+        // Load the shared collections used during onboarding.
+        const responseData = await requestJson("/api/discovery");
+        if (Array.isArray(responseData.rows)) {
+          setLibraryRows(responseData.rows);
+        } else {
+          setLibraryRows([]);
+        }
+      } catch (error) {
+        setErrorMessage(error.message);
+      } finally {
+        setIsLibraryBusy(false);
+      }
+    }
+
+    loadDiscoveryRows();
   }, []);
   useEffect(() => {
-    // Returning users with favorites skip onboarding and get fresh picks.
+    // Skips onboarding and requests recommendations when saved favorites exist.
     if (
       page === "discover" &&
       taste.favorites.length &&
       !recommendationRows.length &&
-      !autoRequested.current
+      !hasAutoRequestedRecommendations.current
     ) {
-      autoRequested.current = true;
-      recommend();
+      // Prevent this effect from requesting the same automatic batch again.
+      hasAutoRequestedRecommendations.current = true;
+      requestRecommendations();
     }
-    // recommend is intentionally stable for the lifetime of the app.
+    // Rechecks when the page or number of favorites changes.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [page, taste.favorites.length]);
   useEffect(() => {
-    // This is a small React-managed back button for secondary screens. It is
-    // kept outside the main layout so it does not shift page content.
-    if (["welcome", "discover"].includes(page)) return undefined;
+    // Adds a back button to secondary screens without shifting the page layout.
+    if (page === "welcome" || page === "discover") {
+      return undefined;
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "page-back";
     button.textContent = "← Back";
+    // Returns to the screen that makes sense for the current page.
     const goBack = () => {
-      if (page === "onboard") P("welcome");
-      else if (page === "check") P(returnPage);
-      else if (page === "taste")
-        P(taste.favorites.length ? "discover" : "welcome");
+      if (page === "onboarding") setPage("welcome");
+      else if (page === "match") setPage(pageToReturnTo);
+      else if (page === "taste") {
+        if (taste.favorites.length > 0) {
+          setPage("discover");
+        } else {
+          setPage("welcome");
+        }
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     };
     button.addEventListener("click", goBack);
+    // Add the button outside the page layout so it does not move the content.
     document.body.appendChild(button);
     return () => {
+      // Remove the button and listener before this effect runs again.
       button.removeEventListener("click", goBack);
       button.remove();
     };
-  }, [page, returnPage, taste.favorites.length]);
+  }, [page, pageToReturnTo, taste.favorites.length]);
   useEffect(() => {
-    // Search waits 300ms before calling TMDB. Aborting the previous request
-    // prevents slow responses from replacing newer search results.
-    const requestId = ++searchRequestRef.current;
-    if (q.trim().length < 2) {
+    // Waits briefly before searching and cancels older searches as the query changes.
+    // The request ID prevents an older response from replacing newer results.
+    const requestId = ++searchRequestIdRef.current;
+    if (searchQuery.trim().length < 2) {
+      // Only search after the user has entered at least two characters.
       // oxlint-disable-next-line react/set-state-in-effect
-      R([]);
+      setSearchResults([]);
       // oxlint-disable-next-line react/set-state-in-effect
-      SB(false);
+      setIsSearchBusy(false);
       return;
     }
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => {
-      SB(true);
-      api(`/api/search?query=${encodeURIComponent(q)}`, { signal: ctrl.signal })
-        .then((d) => {
-          if (requestId !== searchRequestRef.current) return;
-          R(Array.isArray(d) ? d : []);
-          E("");
-        })
-        .catch((e) => {
-          if (e.name !== "AbortError" && requestId === searchRequestRef.current)
-            E(e.message);
-        })
-        .finally(() => {
-          if (!ctrl.signal.aborted && requestId === searchRequestRef.current)
-            SB(false);
-        });
+    const searchController = new AbortController();
+    // Debounce the request so each keystroke does not trigger a search.
+    const timer = setTimeout(async () => {
+      setIsSearchBusy(true);
+      // The URL contains the text the user entered, encoded for safe use in a URL.
+      try {
+        const responseData = await requestJson(
+          `/api/search?query=${encodeURIComponent(searchQuery)}`,
+          { signal: searchController.signal },
+        );
+        // Ignore this response if a newer search has started.
+        if (requestId !== searchRequestIdRef.current) return;
+        if (Array.isArray(responseData)) {
+          setSearchResults(responseData);
+        } else {
+          setSearchResults([]);
+        }
+        setErrorMessage("");
+      } catch (error) {
+        // Aborted searches are expected when the query changes.
+        if (
+          error.name !== "AbortError" &&
+          requestId === searchRequestIdRef.current
+        ) {
+          setErrorMessage(error.message);
+        }
+      } finally {
+        if (
+          !searchController.signal.aborted &&
+          requestId === searchRequestIdRef.current
+        ) {
+          setIsSearchBusy(false);
+        }
+      }
     }, 300);
     return () => {
+      // Cancel both the pending timer and any search already in progress.
       clearTimeout(timer);
-      ctrl.abort();
+      searchController.abort();
     };
-  }, [q]);
+  }, [searchQuery]);
 
-  const favorite = (x) =>
-    T((t) => ({
-      ...t,
-      favorites: t.favorites.some((f) => key(f) === key(x))
-        ? t.favorites.filter((f) => key(f) !== key(x))
-        : [...t.favorites, x],
-    }));
-  const liked = (x) => taste.favorites.some((f) => key(f) === key(x));
-  const feedback = (x, value) =>
-    // Re-clicking the active reaction removes it; otherwise the new reaction
-    // replaces the old one for that title.
-    T((t) => {
-      const updated = { ...t.feedback };
-      if (updated[key(x)]?.value === value) delete updated[key(x)];
-      else updated[key(x)] = { ...x, value };
-      return { ...t, feedback: updated };
+  // Adds a title to favorites, or removes it if it is already there.
+  function toggleFavorite(title) {
+    setTaste((currentTaste) => {
+      const selectedTitleId = getTitleId(title);
+      let isAlreadyFavorite = false;
+      const updatedFavorites = [];
+
+      // Check each favorite and copy only titles that should remain.
+      for (const favoriteTitle of currentTaste.favorites) {
+        if (getTitleId(favoriteTitle) === selectedTitleId) {
+          isAlreadyFavorite = true;
+        } else {
+          updatedFavorites.push(favoriteTitle);
+        }
+      }
+
+      if (!isAlreadyFavorite) {
+        updatedFavorites.push(title);
+      }
+
+      // The three dots copy the current fields into a new object.
+      // The favorites line below replaces only the old favorites list.
+      return {
+        ...currentTaste,
+        favorites: updatedFavorites,
+      };
     });
-  const payload = () => ({
-    // Keep the server payload limited to the signals it understands. Poster
-    // and title fields are still included because they help the UI and prompt.
-    favorites: taste.favorites,
-    feedback: Object.values(taste.feedback),
-    preferences: taste.preferences || {},
-  });
-  const setPreference = (id, value) =>
-    T((t) => ({
-      ...t,
-      preferences: { ...(t.preferences || {}), [id]: value },
-    }));
+  }
 
-  async function recommend() {
-    // Request a new batch, then remember what was shown so later batches can
-    // avoid repeating the same titles in this browser session.
-    if (busy) return;
+  // Checks whether a title is already in the user's favorites.
+  function isFavorite(title) {
+    const selectedTitleId = getTitleId(title);
+    for (const favoriteTitle of taste.favorites) {
+      if (getTitleId(favoriteTitle) === selectedTitleId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Saves a reaction, or removes it when the same reaction is selected again.
+  function toggleFeedback(title, reaction) {
+    setTaste((currentTaste) => {
+      // Copy the saved reactions so the previous React state is not changed.
+      const updatedFeedback = { ...currentTaste.feedback };
+      const selectedTitleId = getTitleId(title);
+      const savedReaction = updatedFeedback[selectedTitleId];
+
+      if (savedReaction && savedReaction.value === reaction) {
+        delete updatedFeedback[selectedTitleId];
+      } else {
+        // Copy the title's details and add the reaction the user selected.
+        updatedFeedback[selectedTitleId] = { ...title, value: reaction };
+      }
+
+      return {
+        ...currentTaste,
+        feedback: updatedFeedback,
+      };
+    });
+  }
+
+  // Prepares the taste data sent with recommendation and match requests.
+  function createTastePayload() {
+    const feedbackItems = [];
+    for (const titleId in taste.feedback) {
+      feedbackItems.push(taste.feedback[titleId]);
+    }
+
+    let preferences = taste.preferences;
+    if (!preferences) {
+      preferences = {};
+    }
+
+    return {
+      favorites: taste.favorites,
+      feedback: feedbackItems,
+      preferences: preferences,
+    };
+  }
+
+  // Updates one preference without changing the others.
+  function updatePreference(preferenceId, preferenceValue) {
+    setTaste((currentTaste) => {
+      const updatedPreferences = {};
+      let savedPreferences = currentTaste.preferences;
+      if (!savedPreferences) {
+        savedPreferences = {};
+      }
+
+      // Copy the other choices before changing the selected preference.
+      for (const savedPreferenceId in savedPreferences) {
+        updatedPreferences[savedPreferenceId] =
+          savedPreferences[savedPreferenceId];
+      }
+      updatedPreferences[preferenceId] = preferenceValue;
+
+      return {
+        ...currentTaste,
+        preferences: updatedPreferences,
+      };
+    });
+  }
+
+  // Requests recommendations, removes duplicate titles, and saves their IDs in history.
+  async function requestRecommendations() {
+    // Ignore repeated clicks while the previous request is still running.
+    if (isBusy) return;
     if (!taste.favorites.length) {
-      P("onboard");
-      E("Pick a movie to continue.");
+      // Favorites are required before the server can personalize results.
+      setPage("onboarding");
+      setErrorMessage("Pick a movie to continue.");
       return;
     }
-    B(true);
-    E("");
+    setIsBusy(true);
+    setErrorMessage("");
     try {
-      const d = await post("/api/recommend", {
-        ...payload(),
-        exclude: taste.history,
-        page: pageNum,
+      const requestData = createTastePayload();
+      requestData.exclude = taste.history;
+      requestData.page = recommendationPage;
+
+      const responseData = await postJson("/api/recommend", requestData);
+      const rows = [];
+      const usedTitleNames = [];
+
+      if (Array.isArray(responseData.rows)) {
+        for (const recommendationRow of responseData.rows) {
+          const uniqueTitles = [];
+
+          // Avoid duplicate titles, including differences in letter case or spacing.
+          let titlesInRow = recommendationRow.items;
+          if (!Array.isArray(titlesInRow)) {
+            titlesInRow = [];
+          }
+
+          for (const title of titlesInRow) {
+            const normalizedName = normalizeTitleName(title);
+            let nameAlreadyUsed = false;
+            for (
+              let nameIndex = 0;
+              nameIndex < usedTitleNames.length;
+              nameIndex += 1
+            ) {
+              if (usedTitleNames[nameIndex] === normalizedName) {
+                nameAlreadyUsed = true;
+                break;
+              }
+            }
+
+            if (normalizedName && !nameAlreadyUsed) {
+              usedTitleNames.push(normalizedName);
+              uniqueTitles.push(title);
+            }
+          }
+
+          if (uniqueTitles.length > 0) {
+            // Copy the row details and replace its items with unique titles.
+            rows.push({
+              ...recommendationRow,
+              items: uniqueTitles,
+            });
+          }
+        }
+      }
+
+      setRecommendationRows(rows);
+      const recommendedTitleIds = [];
+      for (const recommendationRow of rows) {
+        for (const title of recommendationRow.items) {
+          recommendedTitleIds.push(getTitleId(title));
+        }
+      }
+
+      setTaste((currentTaste) => {
+        const updatedHistory = [];
+
+        // Keep old history entries only if this batch did not show them again.
+        for (const savedTitleId of currentTaste.history) {
+          let wasRecommendedAgain = false;
+          for (
+            let titleIndex = 0;
+            titleIndex < recommendedTitleIds.length;
+            titleIndex += 1
+          ) {
+            if (recommendedTitleIds[titleIndex] === savedTitleId) {
+              wasRecommendedAgain = true;
+              break;
+            }
+          }
+
+          if (!wasRecommendedAgain) {
+            updatedHistory.push(savedTitleId);
+          }
+        }
+
+        // Add this batch at the end so the newest titles are easiest to keep.
+        for (const recommendedTitleId of recommendedTitleIds) {
+          updatedHistory.push(recommendedTitleId);
+        }
+
+        // Keep only the 250 most recent title IDs.
+        if (updatedHistory.length > 250) {
+          updatedHistory.splice(0, updatedHistory.length - 250);
+        }
+
+        return {
+          ...currentTaste,
+          history: updatedHistory,
+        };
       });
-      const usedTitles = new Set();
-      const rows = (Array.isArray(d.rows) ? d.rows : [])
-        .map((row) => ({
-          ...row,
-          items: (row.items || []).filter((item) => {
-            const normalized = titleKey(item);
-            if (!normalized || usedTitles.has(normalized)) return false;
-            usedTitles.add(normalized);
-            return true;
-          }),
-        }))
-        .filter((row) => row.items.length);
-      RR(rows);
-      const flat = rows.flatMap((row) => row.items || []);
-      T((t) => ({
-        ...t,
-        history: [
-          ...t.history.filter((k) => !flat.some((x) => key(x) === k)),
-          ...flat.map(key),
-        ].slice(-250),
-      }));
-      N((n) => (n >= 29 ? 1 : n + 2));
-    } catch (e) {
-      E(e.message);
+
+      // Move ahead by two pages for the next recommendation batch.
+      setRecommendationPage((currentPage) => {
+        if (currentPage >= 29) {
+          return 1;
+        }
+        return currentPage + 2;
+      });
+    } catch (error) {
+      setErrorMessage(error.message);
     } finally {
-      B(false);
+      setIsBusy(false);
     }
   }
 
-  async function check(x) {
-    // Only one streaming analysis should be active. Selecting a new title
-    // cancels the previous request so it cannot append text to the wrong card.
-    matchAbortRef.current?.abort();
-    const controller = new AbortController();
-    matchAbortRef.current = controller;
-    setReturnPage(page === "check" ? "discover" : page);
-    const lockedCategory = x.category || null;
-    S(x);
-    M({ category: lockedCategory, reason: "" });
-    P("check");
-    Q("");
-    E("");
-    B(true);
+  // Requests a title analysis and adds each streamed response to the page.
+  async function analyzeTitleMatch(title) {
+    // Cancels the previous analysis so its response cannot appear under this title.
+    if (matchRequestControllerRef.current) {
+      matchRequestControllerRef.current.abort();
+    }
+
+    const requestController = new AbortController();
+    matchRequestControllerRef.current = requestController;
+    // Remember where to return if the user opened match details from another screen.
+    if (page === "match") {
+      setPageToReturnTo("discover");
+    } else {
+      setPageToReturnTo(page);
+    }
+
+    let existingCategory = null;
+    if (title.category) {
+      existingCategory = title.category;
+    }
+
+    setSelectedTitle(title);
+    setMatchAnalysis({ category: existingCategory, reason: "" });
+    setPage("match");
+    setSearchQuery("");
+    setErrorMessage("");
+    setIsBusy(true);
     try {
+      const requestData = createTastePayload();
+      requestData.title = title;
+
       const response = await fetch("/api/match/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload(), title: x }),
-        signal: controller.signal,
+        // Send the selected title and taste data used to create its analysis.
+        body: JSON.stringify(requestData),
+        signal: requestController.signal,
       });
+      // Turn an HTTP failure into an error message for the screen.
       if (!response.ok) {
-        const d = await response.json();
-        throw Error(d.error || "Match analysis failed.");
+        const responseData = await response.json();
+        if (responseData && responseData.error) {
+          throw Error(responseData.error);
+        }
+        throw Error("Match analysis failed.");
       }
       if (!response.body)
         throw Error("Streaming is not supported by this browser.");
+      // A reader provides each incoming piece of the server's streamed response.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      // Network chunks may split an event, so keep incomplete text until the next chunk.
       let buffer = "";
-      const consume = (block) => {
-        const event = block
-          .split("\n")
-          .find((line) => line.startsWith("event:"))
-          ?.slice(6)
-          .trim();
-        const dataLine = block
-          .split("\n")
-          .find((line) => line.startsWith("data:"));
-        if (!dataLine) return;
-        const data = JSON.parse(dataLine.slice(5).trim());
-        if (event === "category" && !lockedCategory)
-          M((current) => ({ ...current, category: data.category }));
-        if (event === "delta")
-          M((current) => ({
-            ...current,
-            reason: `${current?.reason || ""}${data.text}`,
-          }));
-        if (event === "error")
-          throw Error(data.error || "Match analysis failed.");
+      // Reads one server event and updates the category or explanation.
+      const consumeStreamEvent = (eventBlock) => {
+        const eventLines = eventBlock.split("\n");
+        let eventType = "";
+        let dataLine = "";
+
+        for (const line of eventLines) {
+          if (line.startsWith("event:")) {
+            eventType = line.slice(6).trim();
+          }
+          if (line.startsWith("data:")) {
+            dataLine = line;
+          }
+        }
+
+        if (!dataLine) {
+          return;
+        }
+
+        const eventData = JSON.parse(dataLine.slice(5).trim());
+        // The server sends the category and explanation as separate event types.
+        if (eventType === "category") {
+          if (!existingCategory) {
+            setMatchAnalysis((currentAnalysis) => {
+              let currentReason = "";
+              if (currentAnalysis && currentAnalysis.reason) {
+                currentReason = currentAnalysis.reason;
+              }
+              return {
+                category: eventData.category,
+                reason: currentReason,
+              };
+            });
+          }
+        }
+
+        // Add each new text piece to the explanation already on screen.
+        if (eventType === "delta") {
+          setMatchAnalysis((currentAnalysis) => {
+            let currentReason = "";
+            if (currentAnalysis && currentAnalysis.reason) {
+              currentReason = currentAnalysis.reason;
+            }
+            let currentCategory = null;
+            if (currentAnalysis) {
+              currentCategory = currentAnalysis.category;
+            }
+            return {
+              category: currentCategory,
+              reason: currentReason + eventData.text,
+            };
+          });
+        }
+
+        if (eventType === "error") {
+          if (eventData.error) {
+            throw Error(eventData.error);
+          }
+          throw Error("Match analysis failed.");
+        }
       };
+
       while (true) {
-        const { value, done } = await reader.read();
-        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-        const blocks = buffer.split("\n\n");
-        buffer = blocks.pop() || "";
-        blocks.forEach(consume);
-        if (done) break;
+        const streamResult = await reader.read();
+        const value = streamResult.value;
+        const streamFinished = streamResult.done;
+        // Decode bytes and add them to any event text left over from the last read.
+        let decodedText = "";
+        if (value) {
+          decodedText = decoder.decode(value, { stream: !streamFinished });
+        } else {
+          decodedText = decoder.decode(new Uint8Array(), {
+            stream: !streamFinished,
+          });
+        }
+        buffer = buffer + decodedText;
+
+        // Process complete events and leave any unfinished event in buffer.
+        let separatorIndex = buffer.indexOf("\n\n");
+        while (separatorIndex !== -1) {
+          const completeEvent = buffer.slice(0, separatorIndex);
+          consumeStreamEvent(completeEvent);
+          buffer = buffer.slice(separatorIndex + 2);
+          separatorIndex = buffer.indexOf("\n\n");
+        }
+
+        if (streamFinished) break;
       }
-      if (buffer.trim()) consume(buffer);
-    } catch (e) {
-      if (e.name !== "AbortError") E(e.message);
+
+      // Process the final event if the stream ended without a trailing separator.
+      if (buffer.trim()) {
+        consumeStreamEvent(buffer);
+      }
+    } catch (error) {
+      // Aborting a request is expected when another title is selected.
+      if (error.name !== "AbortError") {
+        setErrorMessage(error.message);
+      }
     } finally {
-      if (matchAbortRef.current === controller) matchAbortRef.current = null;
-      B(false);
+      // Clear the request controller only if it still belongs to this request.
+      if (matchRequestControllerRef.current === requestController) {
+        matchRequestControllerRef.current = null;
+      }
+      setIsBusy(false);
     }
   }
 
-  useEffect(() => () => matchAbortRef.current?.abort(), []);
+  // Cancels an active match request if the app is removed from the page.
+  useEffect(() => {
+    return () => {
+      if (matchRequestControllerRef.current) {
+        matchRequestControllerRef.current.abort();
+      }
+    };
+  }, []);
 
-  const cards = (items, mode = "favorite") => (
-    // Keeping card creation here ensures every screen gets identical carousel
-    // behavior and accessibility labels.
-    <Carousel
-      items={items}
-      mode={mode}
-      liked={liked}
-      favorite={favorite}
-      check={check}
-    />
-  );
-  const search = (
-    // This shared search control is rendered on both onboarding and match
-    // details, but its results perform different actions through `mode`.
+  // Renders the shared carousel used to favorite titles or open match details.
+  // The mode tells the carousel which action to use when a title is clicked.
+  function renderTitleCarousel(titles, mode) {
+    if (mode === undefined) {
+      mode = "favorite";
+    }
+
+    return (
+      <Carousel
+        items={titles}
+        mode={mode}
+        liked={isFavorite}
+        favorite={toggleFavorite}
+        check={analyzeTitleMatch}
+      />
+    );
+  }
+  // Shared search field used on onboarding and match-details screens.
+  const searchField = (
     <label className="search">
       <span aria-hidden="true">⌕</span>
       <input
-        value={q}
-        onChange={(e) => Q(e.target.value)}
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
         placeholder="Search real movies & TV shows…"
         aria-label="Search movies and TV shows"
       />
-      {searchBusy && <span className="muted">Searching…</span>}
+      {isSearchBusy && <span className="muted">Searching…</span>}
     </label>
   );
-  const backToFavorites = () => {
-    P("onboard");
-    Q("");
-    E("");
+  // Returns to onboarding so the user can add or change favorites.
+  function backToFavorites() {
+    setPage("onboarding");
+    setSearchQuery("");
+    setErrorMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }
+
+  let discoverButtonClass = "";
+  if (page === "discover") {
+    discoverButtonClass = "current";
+  }
+
+  let tasteButtonClass = "";
+  if (page === "taste") {
+    tasteButtonClass = "current";
+  }
 
   return (
     <div className="app">
@@ -368,9 +714,9 @@ export default function App() {
         <button
           className="brand"
           onClick={() => {
-            P("welcome");
-            Q("");
-            E("");
+            setPage("welcome");
+            setSearchQuery("");
+            setErrorMessage("");
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         >
@@ -378,19 +724,23 @@ export default function App() {
         </button>
         <nav aria-label="Main navigation">
           <button
-            className={page === "discover" ? "current" : ""}
+            className={discoverButtonClass}
             onClick={() => {
-              P(taste.favorites.length ? "discover" : "onboard");
-              E("");
+              if (taste.favorites.length > 0) {
+                setPage("discover");
+              } else {
+                setPage("onboarding");
+              }
+              setErrorMessage("");
             }}
           >
             Discover
           </button>
           <button
-            className={page === "taste" ? "current" : ""}
+            className={tasteButtonClass}
             onClick={() => {
-              P("taste");
-              E("");
+              setPage("taste");
+              setErrorMessage("");
             }}
           >
             My Taste
@@ -398,367 +748,77 @@ export default function App() {
         </nav>
       </header>
       <main>
+        {/* Show only the screen selected by page. Buttons call setPage to switch it. */}
         {page === "welcome" && (
-          <section className="hero">
-            <div className="hero-content">
-              <div className="hero-kicker">REELMATCH</div>
-              <h1>
-                Movie night,
-                <br />
-                <em>solved.</em>
-              </h1>
-              <p>Movies you'll actually love.</p>
-              <button
-                className="primary hero-button"
-                onClick={() => {
-                  P("onboard");
-                  E("");
-                }}
-              >
-                Get Started <span>→</span>
-              </button>
-            </div>
-          </section>
+          <WelcomeScreen
+            setPage={setPage}
+            setErrorMessage={setErrorMessage}
+          />
         )}
-        {page === "onboard" && (
-          <section className="section onboarding">
-            <div className="step-label">STEP 1 OF 2</div>
-            <h1>
-              Pick movies you <em>love.</em>
-            </h1>
-            <p>
-              Tap any titles you already love. You can come back and add more
-              anytime.
-            </p>
-            {search}
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            {q.trim().length >= 2 ? (
-              <>
-                <div className="collection-heading">
-                  <h2>Search results</h2>
-                  <span>{searchBusy ? "Searching…" : "Tap to select"}</span>
-                </div>
-                {searchBusy && (
-                  <p className="inline-loading" role="status">
-                    Searching for titles…
-                  </p>
-                )}
-                {!searchBusy && cards(results)}
-              </>
-            ) : libraryBusy ? (
-              <p className="inline-loading" role="status">
-                Loading title collections…
-              </p>
-            ) : (
-              libraryRows.map((row) => (
-                <section className="title-row" key={row.title}>
-                  <div className="collection-heading">
-                    <h2>{row.title}</h2>
-                    <span></span>
-                  </div>
-                  {cards(row.items || [])}
-                </section>
-              ))
-            )}
-            <div className="sticky-next">
-              <span>
-                <strong>{taste.favorites.length}</strong> selected
-                {taste.favorites.length > 0 && (
-                  <small>
-                    {" "}
-                    —{" "}
-                    {taste.favorites
-                      .slice(-2)
-                      .map((x) => x.title)
-                      .join(", ")}
-                    {taste.favorites.length > 2 ? "…" : ""}
-                  </small>
-                )}
-              </span>
-              <button
-                className="primary"
-                disabled={!taste.favorites.length}
-                onClick={() => {
-                  autoRequested.current = false;
-                  P("discover");
-                  RR([]);
-                  Q("");
-                  E("");
-                }}
-              >
-                Find My Movies <span>→</span>
-              </button>
-            </div>
-          </section>
+        {page === "onboarding" && (
+          <OnboardingScreen
+            searchField={searchField}
+            errorMessage={errorMessage}
+            searchQuery={searchQuery}
+            searchResults={searchResults}
+            isSearchBusy={isSearchBusy}
+            renderTitleCarousel={renderTitleCarousel}
+            isLibraryBusy={isLibraryBusy}
+            libraryRows={libraryRows}
+            taste={taste}
+            resetAutomaticRecommendationRequest={
+              resetAutomaticRecommendationRequest
+            }
+            setPage={setPage}
+            setRecommendationRows={setRecommendationRows}
+            setSearchQuery={setSearchQuery}
+            setErrorMessage={setErrorMessage}
+          />
         )}
         {page === "discover" && (
-          <section className="section discover">
-            <div className="section-top">
-              <div>
-                <div className="step-label">STEP 2 OF 2 · CURATED FOR YOU</div>
-                <h1>
-                  Your next <em>favorite.</em>
-                </h1>
-              </div>
-              <div className="section-actions">
-                <button
-                  className="secondary add-favorites"
-                  onClick={backToFavorites}
-                >
-                  ← Add more favorites
-                </button>
-                <button
-                  className="primary refresh"
-                  disabled={busy}
-                  onClick={recommend}
-                >
-                  {busy ? "Finding…" : "↻ New picks"}
-                </button>
-              </div>
-            </div>
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            {busy && (
-              <div className="finding-state" role="status">
-                <span className="screen-loading-spinner" />{" "}
-                <strong>Finding your movies…</strong>
-                <small>Give us a sec — we’re matching your taste.</small>
-              </div>
-            )}
-            {recommendationRows.length
-              ? recommendationRows.map((row) => (
-                  <section className="title-row" key={row.title}>
-                    <div className="collection-heading">
-                      <h2>{row.title}</h2>
-                      <span>AI-ranked for you</span>
-                    </div>
-                    {cards(row.items || [], "feedback")}
-                  </section>
-                ))
-              : !busy && (
-                  <div className="empty">
-                    <p>Your next movie is one click away.</p>
-                    <button className="primary" onClick={recommend}>
-                      Find movies →
-                    </button>
-                  </div>
-                )}
-            <div className="discover-bottom">
-              <button
-                className="secondary"
-                onClick={() => {
-                  Q("");
-                  E("");
-                  P("check");
-                }}
-              >
-                Search any movie ↗
-              </button>
-            </div>
-          </section>
+          <DiscoverScreen
+            backToFavorites={backToFavorites}
+            isBusy={isBusy}
+            requestRecommendations={requestRecommendations}
+            errorMessage={errorMessage}
+            recommendationRows={recommendationRows}
+            renderTitleCarousel={renderTitleCarousel}
+            setSearchQuery={setSearchQuery}
+            setErrorMessage={setErrorMessage}
+            setPage={setPage}
+          />
         )}
-        {page === "check" && (
-          <section className="section">
-            <div className="step-label">MATCH DETAILS</div>
-            <h1>
-              Find a <em>movie.</em>
-            </h1>
-            <p>Search any title to see how it fits your taste.</p>
-            {search}
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            {selected && (
-              <div className="selected-title">
-                <Poster x={selected} />
-                <div>
-                  <div className="eyebrow">AI MATCH ANALYSIS</div>
-                  <h2>
-                    {selected.title}{" "}
-                    <span className="muted">{selected.year}</span>
-                  </h2>
-                  {busy && !match?.reason ? (
-                    <p>Analyzing your taste…</p>
-                  ) : match ? (
-                    <>
-                      <h3
-                        className={`category-badge analysis-category ${categoryClass(match.category)}`}
-                      >
-                        {match.category || "Reading the vibe…"}
-                      </h3>
-                      <div className="chat-bubble">
-                        <span className="chat-avatar">rm</span>
-                        <p>
-                          {match.reason || "Okayyy, checking the vibe…"}
-                          <span className="typing-cursor" />
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <p>Select a title to check your match.</p>
-                  )}
-                  <div className="detail-actions">
-                    <button
-                      className={`secondary ${liked(selected) ? "active-control" : ""}`}
-                      onClick={() => favorite(selected)}
-                    >
-                      {liked(selected) ? "✓ Favorite" : "+ Add favorite"}
-                    </button>
-                    {[
-                      ["love", "Loved It"],
-                      ["watch", "Want to Watch"],
-                      ["seen", "Already Seen"],
-                      ["no", "Not for Me"],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        className={`reaction-control ${taste.feedback[key(selected)]?.value === value ? "active" : ""}`}
-                        onClick={() => feedback(selected, value)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            {q.trim().length >= 2 && (
-              <>
-                {searchBusy && (
-                  <p className="inline-loading">Searching for titles…</p>
-                )}
-                {!searchBusy && cards(results, "check")}
-              </>
-            )}
-          </section>
+        {page === "match" && (
+          <MatchScreen
+            searchField={searchField}
+            errorMessage={errorMessage}
+            selectedTitle={selectedTitle}
+            isBusy={isBusy}
+            matchAnalysis={matchAnalysis}
+            categoryClass={categoryClass}
+            isFavorite={isFavorite}
+            toggleFavorite={toggleFavorite}
+            taste={taste}
+            toggleFeedback={toggleFeedback}
+            searchQuery={searchQuery}
+            searchResults={searchResults}
+            isSearchBusy={isSearchBusy}
+            renderTitleCarousel={renderTitleCarousel}
+          />
         )}
         {page === "taste" && (
-          <section className="section">
-            <div className="step-label">YOUR COLLECTION</div>
-            <h1>
-              My <em>Taste.</em>
-            </h1>
-            <p>Your favorites, all in one place.</p>
-            <div className="taste-actions">
-              <button className="secondary" onClick={() => P("onboard")}>
-                + Add favorites
-              </button>
-              <button
-                className="secondary subtle-control"
-                onClick={() => SH((v) => !v)}
-              >
-                {showHistory ? "Hide" : "Show"} discovery history (
-                {taste.history.length})
-              </button>
-            </div>
-            <details className="taste-settings">
-              <summary>Preferences</summary>
-              <div className="preference-panel">
-                {QUESTIONS.map((question) => (
-                  <div className="preference-question" key={question.id}>
-                    <h2>{question.title}</h2>
-                    <div className="preference-options">
-                      {question.options.map((option) => (
-                        <button
-                          key={option}
-                          className={
-                            (taste.preferences || {})[question.id] === option
-                              ? "preference-choice chosen"
-                              : "preference-choice"
-                          }
-                          aria-pressed={
-                            (taste.preferences || {})[question.id] === option
-                          }
-                          onClick={() => setPreference(question.id, option)}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-            {showHistory && (
-              <div className="history-note">
-                ReelMatch remembers {taste.history.length} recently recommended
-                titles in this browser.{" "}
-                <button
-                  className="small-button"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Clear recommendation history? Your favorites and reactions will stay saved.",
-                      )
-                    )
-                      T((t) => ({ ...t, history: [] }));
-                  }}
-                >
-                  Clear history
-                </button>
-              </div>
-            )}
-            <h2 className="collection-title">Favorites</h2>
-            {taste.favorites.length ? (
-              cards(taste.favorites)
-            ) : (
-              <div className="empty">
-                No favorites yet. Add a few titles to start shaping your taste.
-              </div>
-            )}
-            {[
-              ["love", "Loved It"],
-              ["watch", "Want to Watch"],
-              ["seen", "Already Seen"],
-              ["no", "Not for Me"],
-            ].map(([v, label]) => {
-              const items = Object.values(taste.feedback).filter(
-                (x) => x.value === v,
-              );
-              return items.length ? (
-                <section className="taste-group" key={v}>
-                  <h2 className="collection-title">
-                    {label} <span className="muted">({items.length})</span>
-                  </h2>
-                  <div className="taste-list">
-                    {items.map((x) => (
-                      <div className="taste-row" key={key(x)}>
-                        <button
-                          className="taste-poster"
-                          onClick={() => check(x)}
-                          aria-label={`Check ${x.title}`}
-                        >
-                          <Poster x={x} />
-                        </button>
-                        <div className="taste-row-info">
-                          <strong>{x.title}</strong>
-                          <span className="muted">
-                            {x.year || "Unknown year"} ·{" "}
-                            {x.type === "tv" ? "TV" : "Movie"}
-                          </span>
-                        </div>
-                        <button
-                          className="small-button"
-                          onClick={() => feedback(x, v)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ) : null;
-            })}
-          </section>
+          <TasteScreen
+            setPage={setPage}
+            setShowHistory={setShowHistory}
+            showHistory={showHistory}
+            taste={taste}
+            preferenceQuestions={PREFERENCE_QUESTIONS}
+            updatePreference={updatePreference}
+            setTaste={setTaste}
+            renderTitleCarousel={renderTitleCarousel}
+            analyzeTitleMatch={analyzeTitleMatch}
+            toggleFeedback={toggleFeedback}
+          />
         )}
       </main>
       <footer>
@@ -779,4 +839,3 @@ export default function App() {
     </div>
   );
 }
-
